@@ -1,0 +1,42 @@
+name: Build VS Code Extension
+
+on:
+  push:
+    paths:
+      - 'vscode/**'
+      - '.github/workflows/build-vscode.yml'
+  pull_request:
+    paths:
+      - 'vscode/**'
+      - '.github/workflows/build-vscode.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: vscode
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: vscode/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compile TypeScript
+        run: npm run compile
+
+      - name: Package VSIX
+        run: npx @vscode/vsce package --allow-missing-repository
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: copilot-code-review-vscode
+          path: vscode/*.vsix
