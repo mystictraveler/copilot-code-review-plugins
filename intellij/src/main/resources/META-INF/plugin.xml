@@ -1,0 +1,42 @@
+<idea-plugin>
+    <id>com.copilotreview.copilot-code-review</id>
+    <name>Copilot Code Review on Save</name>
+    <vendor>copilot-review</vendor>
+    <description>Automatically reviews code using GitHub Copilot on every file save. Requires GitHub Copilot plugin and a Git repository.</description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>Git4Idea</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <backgroundPostStartupActivity implementation="com.copilotreview.CopilotReviewStartup"/>
+        <projectConfigurable
+                parentId="tools"
+                instance="com.copilotreview.CopilotReviewConfigurable"
+                id="com.copilotreview.settings"
+                displayName="Copilot Code Review"/>
+        <projectService serviceImplementation="com.copilotreview.CopilotReviewSettings"/>
+        <projectService serviceImplementation="com.copilotreview.CopilotReviewService"/>
+        <toolWindow id="Copilot Review"
+                    anchor="bottom"
+                    secondary="false"
+                    icon="AllIcons.Actions.Preview"
+                    factoryClass="com.copilotreview.ReviewToolWindowFactory"/>
+    </extensions>
+
+    <actions>
+        <action id="CopilotReview.ReviewNow"
+                class="com.copilotreview.ReviewNowAction"
+                text="Copilot: Review Current File"
+                description="Trigger a Copilot code review on the current file">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+        <action id="CopilotReview.Toggle"
+                class="com.copilotreview.ToggleReviewAction"
+                text="Copilot: Toggle Auto-Review on Save"
+                description="Enable or disable automatic code review on save"/>
+        <action id="CopilotReview.ClearDiagnostics"
+                class="com.copilotreview.ClearDiagnosticsAction"
+                text="Copilot: Clear Review Diagnostics"
+                description="Clear all Copilot code review annotations"/>
+    </actions>
+</idea-plugin>

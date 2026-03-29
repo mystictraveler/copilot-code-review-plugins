@@ -1,0 +1,13 @@
+# VS Code
+vscode/node_modules/
+vscode/out/
+vscode/*.vsix
+
+# IntelliJ
+intellij/.gradle/
+intellij/.intellijPlatform/
+intellij/build/
+intellij/gradle-dist/
+
+# OS
+.DS_Store

@@ -1,0 +1,62 @@
+{
+  "name": "copilot-code-review",
+  "displayName": "Copilot Code Review on Save",
+  "description": "Automatically reviews code using GitHub Copilot on every file save",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.93.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "copilotCodeReview.reviewNow",
+        "title": "Copilot: Review Current File"
+      },
+      {
+        "command": "copilotCodeReview.toggle",
+        "title": "Copilot: Toggle Auto-Review on Save"
+      },
+      {
+        "command": "copilotCodeReview.clearDiagnostics",
+        "title": "Copilot: Clear Review Diagnostics"
+      },
+      {
+        "command": "copilotCodeReview.showPanel",
+        "title": "Copilot: Show Review Panel"
+      }
+    ],
+    "configuration": {
+      "title": "Copilot Code Review",
+      "properties": {
+        "copilotCodeReview.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable automatic code review on save"
+        },
+        "copilotCodeReview.debounceMs": {
+          "type": "number",
+          "default": 2000,
+          "description": "Debounce delay in milliseconds before triggering review after save"
+        },
+        "copilotCodeReview.excludedLanguages": {
+          "type": "array",
+          "default": ["plaintext"],
+          "description": "Language IDs to exclude from auto-review"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.93.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.5.0"
+  }
+}
