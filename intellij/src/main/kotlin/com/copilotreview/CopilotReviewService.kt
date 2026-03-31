@@ -95,13 +95,13 @@ class CopilotReviewService(private val project: Project) {
                     ReviewAnnotator.applyAnnotations(project, path, issues, lineCount)
                     statusCallback?.invoke(if (issues.isEmpty()) "No issues" else "${issues.size} issue(s)")
 
-                    // Update the tool window panel
                     val result = ReviewResult(fileName, path, issues, Date())
-                    ReviewToolWindowPanel.update(project, result)
 
-                    // Show and activate the tool window
+                    // Show the tool window first so the panel is created, then update
                     val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Copilot Review")
-                    toolWindow?.show()
+                    toolWindow?.show {
+                        ReviewToolWindowPanel.update(project, result)
+                    }
                 }
             } catch (e: Exception) {
                 log.warn("Copilot review failed: ${e.message}", e)
