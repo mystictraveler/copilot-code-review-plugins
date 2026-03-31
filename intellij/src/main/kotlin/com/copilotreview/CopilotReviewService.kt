@@ -39,7 +39,9 @@ class CopilotReviewService(private val project: Project) {
         val basePath = project.basePath ?: return false
         var dir: File? = File(basePath)
         while (dir != null) {
-            if (File(dir, ".git").exists()) return true
+            val gitDir = File(dir, ".git")
+            log.info("[CopilotReview] isGitProject: Checking ${gitDir.absolutePath} — exists=${gitDir.exists()}")
+            if (gitDir.exists()) return true
             dir = dir.parentFile
         }
         return false
@@ -48,19 +50,29 @@ class CopilotReviewService(private val project: Project) {
     fun isCopilotInstalled(): Boolean {
         val copilotId = PluginId.getId("com.github.copilot")
         val plugin = PluginManagerCore.getPlugin(copilotId)
-        return plugin != null && plugin.isEnabled
+        val installed = plugin != null && plugin.isEnabled
+        log.info("[CopilotReview] isCopilotInstalled: pluginFound=${plugin != null}, enabled=${plugin?.isEnabled}, result=$installed")
+        return installed
     }
 
     fun scheduleReview(file: VirtualFile) {
         val settings = CopilotReviewSettings.getInstance(project).state
-        if (!settings.enabled) return
+        if (!settings.enabled) {
+            log.info("[CopilotReview] scheduleReview: Skipping ${file.name} — plugin disabled in settings")
+            return
+        }
 
         val excluded = settings.excludedExtensions.split(",").map { it.trim().lowercase() }
         val ext = file.extension?.lowercase() ?: ""
-        if (ext in excluded) return
+        if (ext in excluded) {
+            log.info("[CopilotReview] scheduleReview: Skipping ${file.name} — extension '$ext' is excluded")
+            return
+        }
 
         val path = file.path
         debounceTimers[path]?.cancel()
+
+        log.info("[CopilotReview] scheduleReview: Queuing review for ${file.name} with ${settings.debounceMs}ms debounce")
 
         val task = object : TimerTask() {
             override fun run() {
@@ -74,9 +86,13 @@ class CopilotReviewService(private val project: Project) {
 
     fun reviewFile(file: VirtualFile) {
         val path = file.path
-        if (reviewInProgress.contains(path)) return
+        if (reviewInProgress.contains(path)) {
+            log.info("[CopilotReview] reviewFile: Already in progress for ${file.name} — skipping")
+            return
+        }
         reviewInProgress.add(path)
 
+        log.info("[CopilotReview] reviewFile: Starting review for ${file.name}")
         statusCallback?.invoke("Reviewing...")
 
         Thread {
@@ -88,8 +104,15 @@ class CopilotReviewService(private val project: Project) {
                 }
                 val fileName = file.name
                 val lang = file.fileType.name
+                log.info("[CopilotReview] reviewFile: Read ${content.length} chars, $lineCount lines, lang=$lang")
 
+                log.info("[CopilotReview] reviewFile: Calling Copilot API...")
                 val issues = callCopilotForReview(content, fileName, lang)
+                log.info("[CopilotReview] reviewFile: Got ${issues.size} issue(s) from Copilot")
+
+                for (issue in issues) {
+                    log.info("[CopilotReview]   Line ${issue.line} [${issue.severity}]: ${issue.message}")
+                }
 
                 ApplicationManager.getApplication().invokeLater {
                     ReviewAnnotator.applyAnnotations(project, path, issues, lineCount)
@@ -97,14 +120,18 @@ class CopilotReviewService(private val project: Project) {
 
                     val result = ReviewResult(fileName, path, issues, Date())
 
-                    // Show the tool window first so the panel is created, then update
                     val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Copilot Review")
+                    log.info("[CopilotReview] reviewFile: toolWindow=${if (toolWindow != null) "found" else "NOT FOUND"}")
                     toolWindow?.show {
+                        log.info("[CopilotReview] reviewFile: Tool window shown, updating panel")
                         ReviewToolWindowPanel.update(project, result)
+                    }
+                    if (toolWindow == null) {
+                        log.warn("[CopilotReview] reviewFile: Tool window 'Copilot Review' not registered — results will not be displayed")
                     }
                 }
             } catch (e: Exception) {
-                log.warn("Copilot review failed: ${e.message}", e)
+                log.warn("[CopilotReview] reviewFile: FAILED — ${e.message}", e)
                 ApplicationManager.getApplication().invokeLater {
                     statusCallback?.invoke("Review failed: ${e.message}")
                 }
@@ -115,7 +142,9 @@ class CopilotReviewService(private val project: Project) {
     }
 
     private fun callCopilotForReview(code: String, fileName: String, lang: String): List<ReviewIssue> {
+        log.info("[CopilotReview] callCopilotForReview: Getting API token...")
         val token = getCopilotApiToken()
+        log.info("[CopilotReview] callCopilotForReview: Token obtained (${token.take(8)}...)")
         val prompt = buildReviewPrompt(code, fileName, lang)
 
         val requestBody = gson.toJson(mapOf(
@@ -142,32 +171,43 @@ class CopilotReviewService(private val project: Project) {
         conn.doOutput = true
 
         conn.outputStream.use { it.write(requestBody.toByteArray()) }
+        log.info("[CopilotReview] callCopilotForReview: Request sent to ${conn.url}")
 
         val responseCode = conn.responseCode
+        log.info("[CopilotReview] callCopilotForReview: Response code = $responseCode")
         if (responseCode != 200) {
             val errorBody = try {
                 conn.errorStream?.bufferedReader()?.readText() ?: "no error body"
             } catch (_: Exception) { "unreadable" }
+            log.warn("[CopilotReview] callCopilotForReview: API error $responseCode: $errorBody")
             throw RuntimeException("Copilot API returned $responseCode: $errorBody")
         }
 
         val responseBody = conn.inputStream.bufferedReader().readText()
+        log.info("[CopilotReview] callCopilotForReview: Response body length = ${responseBody.length}")
         return extractReviewFromChatResponse(responseBody)
     }
 
     private fun getCopilotApiToken(): String {
         // Return cached token if still valid (with 5 min buffer)
         if (cachedToken != null && System.currentTimeMillis() / 1000 < tokenExpiry - 300) {
+            log.info("[CopilotReview] getCopilotApiToken: Using cached token (expires_at=$tokenExpiry)")
             return cachedToken!!
         }
 
         // Read the GitHub OAuth token from Copilot's config
+        log.info("[CopilotReview] getCopilotApiToken: Looking for OAuth token in Copilot config files...")
         val oauthToken = readCopilotOAuthToken()
-            ?: throw IllegalStateException(
+        if (oauthToken == null) {
+            log.warn("[CopilotReview] getCopilotApiToken: No OAuth token found in any config file")
+            throw IllegalStateException(
                 "Could not find GitHub Copilot OAuth token. Make sure you are signed in to GitHub Copilot."
             )
+        }
+        log.info("[CopilotReview] getCopilotApiToken: Found OAuth token (${oauthToken.take(8)}...)")
 
         // Exchange OAuth token for a Copilot API session token
+        log.info("[CopilotReview] getCopilotApiToken: Exchanging OAuth token for API session token...")
         val url = URI("https://api.github.com/copilot_internal/v2/token").toURL()
         val conn = url.openConnection() as HttpURLConnection
         conn.requestMethod = "GET"
@@ -178,10 +218,12 @@ class CopilotReviewService(private val project: Project) {
         conn.readTimeout = 10000
 
         val responseCode = conn.responseCode
+        log.info("[CopilotReview] getCopilotApiToken: Token exchange response code = $responseCode")
         if (responseCode != 200) {
             val errorBody = try {
                 conn.errorStream?.bufferedReader()?.readText() ?: ""
             } catch (_: Exception) { "" }
+            log.warn("[CopilotReview] getCopilotApiToken: Token exchange failed: $errorBody")
             throw RuntimeException("Failed to get Copilot token (HTTP $responseCode): $errorBody")
         }
 
@@ -189,6 +231,7 @@ class CopilotReviewService(private val project: Project) {
         val json = JsonParser.parseString(responseBody).asJsonObject
         cachedToken = json.get("token").asString
         tokenExpiry = json.get("expires_at").asLong
+        log.info("[CopilotReview] getCopilotApiToken: Session token obtained, expires_at=$tokenExpiry")
 
         return cachedToken!!
     }
