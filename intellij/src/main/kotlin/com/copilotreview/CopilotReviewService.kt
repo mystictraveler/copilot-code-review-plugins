@@ -9,7 +9,6 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.google.gson.Gson
 import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
-import git4idea.repo.GitRepositoryManager
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
@@ -37,8 +36,8 @@ class CopilotReviewService(private val project: Project) {
     var statusCallback: ((String) -> Unit)? = null
 
     fun isGitProject(): Boolean {
-        val repos = GitRepositoryManager.getInstance(project).repositories
-        return repos.isNotEmpty()
+        val basePath = project.basePath ?: return false
+        return File(basePath, ".git").exists()
     }
 
     fun isCopilotInstalled(): Boolean {

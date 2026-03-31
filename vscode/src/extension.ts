@@ -1,16 +1,7 @@
 import * as vscode from 'vscode';
 
-interface GitExtensionAPI {
-    getAPI(version: number): GitAPI;
-}
-
-interface GitAPI {
-    repositories: GitRepository[];
-}
-
-interface GitRepository {
-    rootUri: vscode.Uri;
-}
+import * as fs from 'fs';
+import * as path from 'path';
 
 const DIAGNOSTIC_SOURCE = 'Copilot Review';
 let diagnosticCollection: vscode.DiagnosticCollection;
@@ -18,7 +9,6 @@ let debounceTimers = new Map<string, NodeJS.Timeout>();
 let enabled = true;
 let statusBarItem: vscode.StatusBarItem;
 let reviewInProgress = new Set<string>();
-let gitAPI: GitAPI | undefined;
 let outputChannel: vscode.OutputChannel;
 let reviewPanel: vscode.WebviewPanel | undefined;
 
@@ -28,8 +18,9 @@ function isCopilotInstalled(): boolean {
 }
 
 function workspaceHasGitRepo(): boolean {
-    if (!gitAPI) return false;
-    return gitAPI.repositories.length > 0;
+    const folders = vscode.workspace.workspaceFolders;
+    if (!folders) return false;
+    return folders.some(folder => fs.existsSync(path.join(folder.uri.fsPath, '.git')));
 }
 
 export async function activate(context: vscode.ExtensionContext) {
@@ -43,13 +34,6 @@ export async function activate(context: vscode.ExtensionContext) {
             }
         });
         return;
-    }
-
-    // Initialize Git API
-    const gitExtension = vscode.extensions.getExtension<GitExtensionAPI>('vscode.git');
-    if (gitExtension) {
-        const ext = gitExtension.isActive ? gitExtension.exports : await gitExtension.activate();
-        gitAPI = ext.getAPI(1);
     }
 
     if (!workspaceHasGitRepo()) {
