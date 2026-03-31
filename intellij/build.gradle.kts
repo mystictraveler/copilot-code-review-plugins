@@ -17,7 +17,6 @@ repositories {
 dependencies {
     intellijPlatform {
         intellijIdeaCommunity("2024.2")
-        bundledPlugin("Git4Idea")
         instrumentationTools()
     }
 }
@@ -29,7 +28,7 @@ kotlin {
 tasks {
     patchPluginXml {
         sinceBuild.set("242")
-        untilBuild.set("252.*")
+        untilBuild.set("253.*")
     }
 
     buildSearchableOptions {
