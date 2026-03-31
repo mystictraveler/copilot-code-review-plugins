@@ -37,7 +37,12 @@ class CopilotReviewService(private val project: Project) {
 
     fun isGitProject(): Boolean {
         val basePath = project.basePath ?: return false
-        return File(basePath, ".git").exists()
+        var dir: File? = File(basePath)
+        while (dir != null) {
+            if (File(dir, ".git").exists()) return true
+            dir = dir.parentFile
+        }
+        return false
     }
 
     fun isCopilotInstalled(): Boolean {
