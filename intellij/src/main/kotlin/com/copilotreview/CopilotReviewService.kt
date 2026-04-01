@@ -294,13 +294,7 @@ $code"""
     }
 
     private fun openConnection(url: URL): HttpURLConnection {
-        val httpConfig = HttpConfigurable.getInstance()
-        return if (httpConfig.USE_HTTP_PROXY) {
-            log.info("[CopilotReview] Using IDE proxy: ${httpConfig.PROXY_HOST}:${httpConfig.PROXY_PORT}")
-            httpConfig.openHttpConnection(url.toString()) as HttpURLConnection
-        } else {
-            url.openConnection() as HttpURLConnection
-        }
+        return HttpConfigurable.getInstance().openHttpConnection(url.toString()) as HttpURLConnection
     }
 
     fun dispose() {
