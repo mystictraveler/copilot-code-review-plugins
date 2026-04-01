@@ -1,5 +1,6 @@
 package com.copilotreview
 
+import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.ToolWindow
@@ -20,7 +21,10 @@ data class ReviewResult(
 
 class ReviewToolWindowFactory : ToolWindowFactory, DumbAware {
 
+    private val log = Logger.getInstance(ReviewToolWindowFactory::class.java)
+
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
+        log.info("[CopilotReview] ReviewToolWindowFactory: creating tool window panel for project '${project.name}'")
         val panel = ReviewToolWindowPanel(project)
         val content = ContentFactory.getInstance().createContent(panel.component, "Review", false)
         toolWindow.contentManager.addContent(content)
@@ -29,6 +33,8 @@ class ReviewToolWindowFactory : ToolWindowFactory, DumbAware {
 }
 
 class ReviewToolWindowPanel(private val project: Project) {
+
+    private val log = Logger.getInstance(ReviewToolWindowPanel::class.java)
 
     val component: JComponent
     private var browser: JBCefBrowser? = null
@@ -43,7 +49,9 @@ class ReviewToolWindowPanel(private val project: Project) {
             jcef.loadHTML(buildHtml(null))
             browser = jcef
             wrapper.add(jcef.component, BorderLayout.CENTER)
-        } catch (_: Exception) {
+            log.info("[CopilotReview] ReviewToolWindowPanel: created with JCEF browser for project '${project.name}'")
+        } catch (e: Exception) {
+            log.info("[CopilotReview] ReviewToolWindowPanel: JCEF not available (${e.message}), falling back to JEditorPane for project '${project.name}'")
             val pane = JEditorPane().apply {
                 contentType = "text/html"
                 isEditable = false
@@ -57,6 +65,7 @@ class ReviewToolWindowPanel(private val project: Project) {
     }
 
     fun updateResults(result: ReviewResult) {
+        log.info("[CopilotReview] ReviewToolWindowPanel: updating results for '${result.fileName}' with ${result.issues.size} issue(s)")
         val html = buildHtml(result)
         if (browser != null) {
             browser!!.loadHTML(html)

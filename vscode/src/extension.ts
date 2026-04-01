@@ -24,7 +24,10 @@ function workspaceHasGitRepo(): boolean {
 }
 
 export async function activate(context: vscode.ExtensionContext) {
+    console.log('[CopilotReview] Activating extension...');
+
     if (!isCopilotInstalled()) {
+        console.log('[CopilotReview] GitHub Copilot not found, aborting activation.');
         vscode.window.showErrorMessage(
             'Copilot Code Review requires GitHub Copilot to be installed.',
             'Install Copilot'
@@ -37,9 +40,12 @@ export async function activate(context: vscode.ExtensionContext) {
     }
 
     if (!workspaceHasGitRepo()) {
+        console.log('[CopilotReview] No Git repository found, aborting activation.');
         vscode.window.showWarningMessage('Copilot Code Review is disabled: no Git repository found in this workspace.');
         return;
     }
+
+    console.log('[CopilotReview] Prerequisites met. Initializing...');
 
     diagnosticCollection = vscode.languages.createDiagnosticCollection('copilotCodeReview');
     context.subscriptions.push(diagnosticCollection);
@@ -57,12 +63,24 @@ export async function activate(context: vscode.ExtensionContext) {
     // Auto-review on save
     context.subscriptions.push(
         vscode.workspace.onDidSaveTextDocument((document) => {
-            if (!enabled) return;
+            if (!enabled) {
+                console.log('[CopilotReview] Save detected but review is disabled, skipping.');
+                return;
+            }
             const config = vscode.workspace.getConfiguration('copilotCodeReview');
-            if (!config.get<boolean>('enabled', true)) return;
+            if (!config.get<boolean>('enabled', true)) {
+                console.log('[CopilotReview] Save detected but copilotCodeReview.enabled is false, skipping.');
+                return;
+            }
 
             const excluded = config.get<string[]>('excludedLanguages', ['plaintext']);
-            if (excluded.includes(document.languageId)) return;
+            if (excluded.includes(document.languageId)) {
+                console.log(`[CopilotReview] Save detected but language "${document.languageId}" is excluded, skipping.`);
+                return;
+            }
+
+            const fileName = document.fileName.split('/').pop() ?? document.fileName;
+            console.log(`[CopilotReview] Save triggered for "${fileName}" (language: ${document.languageId}).`);
 
             const debounceMs = config.get<number>('debounceMs', 2000);
             const scope = config.get<string>('scope', 'file');
@@ -70,7 +88,10 @@ export async function activate(context: vscode.ExtensionContext) {
             const debounceKey = scope === 'project' ? '__project__' : document.uri.toString();
 
             const existing = debounceTimers.get(debounceKey);
-            if (existing) clearTimeout(existing);
+            if (existing) {
+                console.log(`[CopilotReview] Resetting debounce timer (${debounceMs}ms) for scope="${scope}".`);
+                clearTimeout(existing);
+            }
 
             debounceTimers.set(debounceKey, setTimeout(() => {
                 debounceTimers.delete(debounceKey);
@@ -95,6 +116,7 @@ export async function activate(context: vscode.ExtensionContext) {
         }),
         vscode.commands.registerCommand('copilotCodeReview.toggle', () => {
             enabled = !enabled;
+            console.log(`[CopilotReview] Toggled: ${enabled ? 'Enabled' : 'Disabled'}.`);
             updateStatusBar();
             vscode.window.showInformationMessage(`Copilot Code Review: ${enabled ? 'Enabled' : 'Disabled'}`);
             if (!enabled) {
@@ -115,6 +137,8 @@ export async function activate(context: vscode.ExtensionContext) {
             diagnosticCollection.delete(document.uri);
         })
     );
+
+    console.log('[CopilotReview] Extension activated successfully.');
 }
 
 function updateStatusBar() {
@@ -134,21 +158,37 @@ async function reviewAllOpenFiles(excluded: string[]) {
     const documents = vscode.workspace.textDocuments.filter(doc =>
         doc.uri.scheme === 'file' && !excluded.includes(doc.languageId)
     );
+    console.log(`[CopilotReview] Reviewing all open files: ${documents.length} file(s) eligible.`);
     for (const doc of documents) {
-        await reviewDocument(doc);
+        try {
+            await reviewDocument(doc);
+        } catch (err: any) {
+            const name = doc.fileName.split('/').pop() ?? doc.fileName;
+            console.error(`[CopilotReview] Error reviewing "${name}" during project review, continuing with remaining files:`, err?.message ?? err);
+        }
     }
 }
 
 async function reviewDocument(document: vscode.TextDocument) {
     const uri = document.uri.toString();
-    if (reviewInProgress.has(uri)) return;
+    const docFileName = document.fileName.split('/').pop() ?? document.fileName;
+
+    if (reviewInProgress.has(uri)) {
+        console.log(`[CopilotReview] Review already in progress for "${docFileName}", skipping.`);
+        return;
+    }
     reviewInProgress.add(uri);
+
+    console.log(`[CopilotReview] Starting review for "${docFileName}" (language: ${document.languageId}, chars: ${document.getText().length}, lines: ${document.lineCount}).`);
 
     const originalStatus = statusBarItem.text;
     statusBarItem.text = '$(sync~spin) Reviewing...';
 
     try {
+        const startTime = Date.now();
         const { diagnostics, issues } = await callCopilotForReview(document);
+        const elapsedMs = Date.now() - startTime;
+        console.log(`[CopilotReview] Review completed for "${docFileName}" in ${elapsedMs}ms. Found ${issues.length} issue(s).`);
         diagnosticCollection.set(document.uri, diagnostics);
 
         const fileName = document.fileName.split('/').pop() ?? document.fileName;
@@ -193,6 +233,7 @@ async function reviewDocument(document: vscode.TextDocument) {
         }
 
     } catch (err: any) {
+        console.error(`[CopilotReview] Error reviewing "${docFileName}":`, err?.message ?? err);
         if (err?.message?.includes('model is not available')) {
             vscode.window.showErrorMessage(
                 'Copilot Code Review: GitHub Copilot is not available. Make sure the GitHub Copilot Chat extension is installed and signed in.'
@@ -208,15 +249,20 @@ async function reviewDocument(document: vscode.TextDocument) {
 }
 
 async function callCopilotForReview(document: vscode.TextDocument): Promise<{ diagnostics: vscode.Diagnostic[]; issues: ParsedIssue[] }> {
+    console.log('[CopilotReview] Selecting language model (family: gpt-4o)...');
     const models = await vscode.lm.selectChatModels({ family: 'gpt-4o' });
     if (models.length === 0) {
+        console.error('[CopilotReview] No language models available.');
         throw new Error('Copilot language model is not available. Ensure GitHub Copilot Chat is installed.');
     }
     const model = models[0];
+    console.log(`[CopilotReview] Model selected: "${model.name}" (id: ${model.id}, family: ${model.family}, vendor: ${model.vendor}).`);
 
     const code = document.getText();
     const fileName = document.fileName.split('/').pop() ?? document.fileName;
     const lang = document.languageId;
+
+    console.log(`[CopilotReview] Sending review request for "${fileName}" (language: ${lang}, chars: ${code.length}).`);
 
     const prompt = `You are a code reviewer. Review the following ${lang} file "${fileName}" for bugs, security issues, performance problems, and code quality concerns.
 
@@ -233,14 +279,20 @@ Code:
 ${code}`;
 
     const messages = [vscode.LanguageModelChatMessage.User(prompt)];
-    const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
+    const cancellationTokenSource = new vscode.CancellationTokenSource();
+    try {
+        const response = await model.sendRequest(messages, {}, cancellationTokenSource.token);
 
-    let fullResponse = '';
-    for await (const chunk of response.text) {
-        fullResponse += chunk;
+        let fullResponse = '';
+        for await (const chunk of response.text) {
+            fullResponse += chunk;
+        }
+
+        console.log(`[CopilotReview] Received response (${fullResponse.length} chars). Parsing...`);
+        return parseReviewResponse(fullResponse, document);
+    } finally {
+        cancellationTokenSource.dispose();
     }
-
-    return parseReviewResponse(fullResponse, document);
 }
 
 function parseReviewResponse(response: string, document: vscode.TextDocument): { diagnostics: vscode.Diagnostic[]; issues: ParsedIssue[] } {
@@ -248,23 +300,51 @@ function parseReviewResponse(response: string, document: vscode.TextDocument): {
     let jsonStr = response.trim();
     const fenceMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
     if (fenceMatch) {
+        console.log('[CopilotReview] Stripped markdown fences from response.');
         jsonStr = fenceMatch[1].trim();
     }
 
     // Try to find a JSON array in the response
     const arrayMatch = jsonStr.match(/\[[\s\S]*\]/);
-    if (!arrayMatch) return { diagnostics: [], issues: [] };
+    if (!arrayMatch) {
+        console.warn('[CopilotReview] No JSON array found in response. Raw response (first 500 chars):', response.substring(0, 500));
+        return { diagnostics: [], issues: [] };
+    }
 
     let rawIssues: Array<{ line: number; severity: string; message: string }>;
     try {
         rawIssues = JSON.parse(arrayMatch[0]);
-    } catch {
+    } catch (parseErr: any) {
+        console.error('[CopilotReview] Failed to parse JSON from response:', parseErr?.message ?? parseErr);
+        console.error('[CopilotReview] Attempted to parse (first 500 chars):', arrayMatch[0].substring(0, 500));
         return { diagnostics: [], issues: [] };
     }
 
-    if (!Array.isArray(rawIssues)) return { diagnostics: [], issues: [] };
+    if (!Array.isArray(rawIssues)) {
+        console.warn('[CopilotReview] Parsed JSON is not an array. Type:', typeof rawIssues);
+        return { diagnostics: [], issues: [] };
+    }
 
-    const issues: ParsedIssue[] = rawIssues.filter(issue => issue.line && issue.message);
+    const validSeverities = new Set(['error', 'warning', 'info', 'hint']);
+    const issues: ParsedIssue[] = rawIssues
+        .filter(issue => {
+            if (!issue.line || !issue.message) {
+                console.warn('[CopilotReview] Skipping malformed issue (missing line or message):', JSON.stringify(issue).substring(0, 200));
+                return false;
+            }
+            if (typeof issue.line !== 'number' || issue.line < 1) {
+                console.warn(`[CopilotReview] Skipping issue with invalid line number: ${issue.line}`);
+                return false;
+            }
+            return true;
+        })
+        .map(issue => ({
+            line: issue.line,
+            severity: validSeverities.has(issue.severity) ? issue.severity : 'warning',
+            message: issue.message,
+        }));
+
+    console.log(`[CopilotReview] Parsed ${issues.length} valid issue(s) from ${rawIssues.length} raw item(s).`);
 
     const diagnostics = issues.map(issue => {
         const line = Math.max(0, Math.min((issue.line ?? 1) - 1, document.lineCount - 1));
@@ -446,8 +526,10 @@ function buildReviewHtml(results: { fileName: string; filePath: string; issues: 
 }
 
 export function deactivate() {
+    console.log('[CopilotReview] Deactivating extension...');
     for (const timer of debounceTimers.values()) {
         clearTimeout(timer);
     }
     debounceTimers.clear();
+    console.log('[CopilotReview] Extension deactivated.');
 }

@@ -15,16 +15,18 @@ class CopilotReviewStartup : ProjectActivity {
     private val log = Logger.getInstance(CopilotReviewStartup::class.java)
 
     override suspend fun execute(project: Project) {
+        log.info("[CopilotReview] Startup: initializing for project '${project.name}'")
         val service = CopilotReviewService.getInstance(project)
 
         // Check Git repo
         if (!service.isGitProject()) {
-            log.info("Copilot Code Review: No Git repository found in project, disabling.")
+            log.info("[CopilotReview] Startup: no Git repository found in project '${project.name}', disabling")
             ApplicationManager.getApplication().invokeLater {
                 setStatusBarText(project, "Copilot Review: No Git repo")
             }
             return
         }
+        log.info("[CopilotReview] Startup: Git repository detected for project '${project.name}'")
 
         // Set up status bar callback
         service.statusCallback = { text ->
@@ -38,6 +40,7 @@ class CopilotReviewStartup : ProjectActivity {
         }
 
         // Listen for file saves
+        log.info("[CopilotReview] Startup: registering file save listener for project '${project.name}'")
         project.messageBus.connect().subscribe(
             VirtualFileManager.VFS_CHANGES,
             object : BulkFileListener {
@@ -50,13 +53,17 @@ class CopilotReviewStartup : ProjectActivity {
                         val openFiles = FileEditorManager.getInstance(project).openFiles
                         if (file !in openFiles) continue
 
+                        log.info("[CopilotReview] Startup: file save detected for '${file.name}'")
+
                         val settings = CopilotReviewSettings.getInstance(project).state
                         if (settings.scope == "project") {
+                            log.info("[CopilotReview] Startup: scope is 'project', scheduling review for all ${openFiles.size} open file(s)")
                             for (openFile in openFiles) {
                                 service.scheduleReview(openFile)
                             }
                             break
                         } else {
+                            log.info("[CopilotReview] Startup: scope is 'file', scheduling review for '${file.name}' only")
                             service.scheduleReview(file)
                         }
                     }

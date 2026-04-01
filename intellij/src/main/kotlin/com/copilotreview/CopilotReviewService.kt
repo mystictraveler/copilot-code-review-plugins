@@ -40,13 +40,20 @@ class CopilotReviewService(private val project: Project) {
 
     fun scheduleReview(file: VirtualFile) {
         val settings = CopilotReviewSettings.getInstance(project).state
-        if (!settings.enabled) return
+        if (!settings.enabled) {
+            log.info("[CopilotReview] scheduleReview skipped: plugin disabled")
+            return
+        }
 
         val excluded = settings.excludedExtensions.split(",").map { it.trim().lowercase() }
         val ext = file.extension?.lowercase() ?: ""
-        if (ext in excluded) return
+        if (ext in excluded) {
+            log.info("[CopilotReview] scheduleReview skipped: extension '$ext' is excluded for file '${file.name}'")
+            return
+        }
 
         val path = file.path
+        log.info("[CopilotReview] scheduleReview: scheduling review for '${file.name}' with ${settings.debounceMs}ms debounce")
         debounceTimers[path]?.cancel()
 
         val task = object : TimerTask() {
@@ -61,19 +68,29 @@ class CopilotReviewService(private val project: Project) {
 
     fun reviewFile(file: VirtualFile) {
         val path = file.path
-        if (reviewInProgress.contains(path)) return
+        if (reviewInProgress.contains(path)) {
+            log.info("[CopilotReview] reviewFile: review already in progress for '${file.name}', skipping")
+            return
+        }
         reviewInProgress.add(path)
 
+        log.info("[CopilotReview] reviewFile: starting review for '${file.name}' (path=$path)")
         statusCallback?.invoke("Reviewing...")
 
         Thread {
+            val reviewStartTime = System.currentTimeMillis()
             try {
                 val (content, lineCount) = ApplicationManager.getApplication().runReadAction<Pair<String, Int>> {
                     val text = String(file.contentsToByteArray())
                     Pair(text, text.count { it == '\n' } + 1)
                 }
 
+                log.info("[CopilotReview] reviewFile: file='${file.name}', language=${file.fileType.name}, chars=${content.length}, lines=$lineCount")
+
                 val issues = callLmForReview(content, file.name, file.fileType.name)
+
+                val totalElapsed = System.currentTimeMillis() - reviewStartTime
+                log.info("[CopilotReview] reviewFile: completed for '${file.name}' in ${totalElapsed}ms, found ${issues.size} issue(s)")
 
                 ApplicationManager.getApplication().invokeLater {
                     ReviewAnnotator.applyAnnotations(project, path, issues, lineCount)
@@ -86,7 +103,8 @@ class CopilotReviewService(private val project: Project) {
                     toolWindow?.show()
                 }
             } catch (e: Exception) {
-                log.warn("Review failed: ${e.message}", e)
+                val totalElapsed = System.currentTimeMillis() - reviewStartTime
+                log.warn("[CopilotReview] reviewFile: review failed for '${file.name}' after ${totalElapsed}ms: ${e.message}", e)
                 ApplicationManager.getApplication().invokeLater {
                     statusCallback?.invoke("Review failed: ${e.message}")
                 }
@@ -100,16 +118,22 @@ class CopilotReviewService(private val project: Project) {
         val settings = CopilotReviewSettings.getInstance(project).state
         val modelId = settings.model
 
+        log.info("[CopilotReview] callLmForReview: requested model id='$modelId' for file='$fileName'")
+
         val lm = LmService.getInstance()
         val models = runBlocking { lm.selectChatModels(LmModelSelector(id = modelId)) }
-            .ifEmpty { runBlocking { lm.selectChatModels() } }
-
         if (models.isEmpty()) {
+            log.warn("[CopilotReview] callLmForReview: configured model '$modelId' not found, falling back to any available model")
+        }
+        val resolvedModels = models.ifEmpty { runBlocking { lm.selectChatModels() } }
+
+        if (resolvedModels.isEmpty()) {
+            log.warn("[CopilotReview] callLmForReview: no language model available at all")
             throw IllegalStateException("No language model available. Install an LM provider plugin (e.g. LM Copilot Bridge).")
         }
 
-        val model = models.first()
-        log.info("[CopilotReview] Using model: ${model.name} (${model.id}) from ${model.vendor}")
+        val model = resolvedModels.first()
+        log.info("[CopilotReview] callLmForReview: using model name='${model.name}', id='${model.id}', vendor='${model.vendor}'")
 
         val prompt = buildReviewPrompt(code, fileName, lang)
         val messages = listOf(
@@ -117,11 +141,15 @@ class CopilotReviewService(private val project: Project) {
             LmChatMessage.user(prompt)
         )
 
+        val apiStartTime = System.currentTimeMillis()
         val response = runBlocking {
             model.sendRequest(messages, LmChatRequestOptions(temperature = 0.1))
         }
 
         val responseText = runBlocking { response.text() }
+        val apiElapsed = System.currentTimeMillis() - apiStartTime
+        log.info("[CopilotReview] callLmForReview: LM API call completed in ${apiElapsed}ms, response length=${responseText.length} chars")
+
         return parseResponse(responseText)
     }
 
@@ -162,7 +190,7 @@ $code"""
                 ReviewIssue(line, severity, message)
             }
         } catch (e: Exception) {
-            log.warn("Failed to parse review response: ${e.message}")
+            log.warn("[CopilotReview] parseResponse: failed to parse review response: ${e.message}", e)
             emptyList()
         }
     }
