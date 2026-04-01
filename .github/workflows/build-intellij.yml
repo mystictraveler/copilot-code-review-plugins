@@ -1,6 +1,7 @@
 name: Build IntelliJ Plugin
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - 'intellij/**'
