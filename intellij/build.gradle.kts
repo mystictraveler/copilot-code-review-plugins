@@ -17,6 +17,7 @@ repositories {
 dependencies {
     intellijPlatform {
         intellijIdeaCommunity("2024.2")
+        plugin("com.github.copilot", "2.6.0")
         instrumentationTools()
     }
 }

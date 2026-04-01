@@ -7,14 +7,10 @@ import com.intellij.openapi.extensions.PluginId
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.google.gson.Gson
-import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
-import java.io.BufferedReader
-import java.io.File
-import java.io.InputStreamReader
-import java.net.HttpURLConnection
-import java.net.URI
 import com.intellij.openapi.wm.ToolWindowManager
+import com.github.copilot.CopilotPlugin
+import java.io.File
 import java.util.Date
 import java.util.Timer
 import java.util.TimerTask
@@ -27,11 +23,6 @@ class CopilotReviewService(private val project: Project) {
     private val timer = Timer("CopilotReviewDebounce", true)
     private val reviewInProgress = ConcurrentHashMap.newKeySet<String>()
     private val gson = Gson()
-
-    @Volatile
-    private var cachedToken: String? = null
-    @Volatile
-    private var tokenExpiry: Long = 0
 
     var statusCallback: ((String) -> Unit)? = null
 
@@ -106,7 +97,7 @@ class CopilotReviewService(private val project: Project) {
                 val lang = file.fileType.name
                 log.info("[CopilotReview] reviewFile: Read ${content.length} chars, $lineCount lines, lang=$lang")
 
-                log.info("[CopilotReview] reviewFile: Calling Copilot API...")
+                log.info("[CopilotReview] reviewFile: Calling Copilot via plugin...")
                 val issues = callCopilotForReview(content, fileName, lang)
                 log.info("[CopilotReview] reviewFile: Got ${issues.size} issue(s) from Copilot")
 
@@ -142,152 +133,20 @@ class CopilotReviewService(private val project: Project) {
     }
 
     private fun callCopilotForReview(code: String, fileName: String, lang: String): List<ReviewIssue> {
-        log.info("[CopilotReview] callCopilotForReview: Getting API token...")
-        val token = getCopilotApiToken()
-        log.info("[CopilotReview] callCopilotForReview: Token obtained (${token.take(8)}...)")
         val prompt = buildReviewPrompt(code, fileName, lang)
 
-        val requestBody = gson.toJson(mapOf(
-            "messages" to listOf(
-                mapOf("role" to "system", "content" to "You are a code reviewer. You respond only with valid JSON arrays."),
-                mapOf("role" to "user", "content" to prompt)
-            ),
-            "model" to "gpt-4o",
-            "temperature" to 0.1,
-            "stream" to false
-        ))
+        log.info("[CopilotReview] callCopilotForReview: Sending chat request via Copilot plugin...")
 
-        val url = URI("https://api.githubcopilot.com/chat/completions").toURL()
-        val conn = url.openConnection() as HttpURLConnection
-        conn.requestMethod = "POST"
-        conn.setRequestProperty("Authorization", "Bearer $token")
-        conn.setRequestProperty("Content-Type", "application/json")
-        conn.setRequestProperty("Editor-Version", "JetBrains-IC/2024.2")
-        conn.setRequestProperty("Editor-Plugin-Version", "copilot-code-review/0.0.1")
-        conn.setRequestProperty("Openai-Organization", "github-copilot")
-        conn.setRequestProperty("Copilot-Integration-Id", "vscode-chat")
-        conn.connectTimeout = 30000
-        conn.readTimeout = 60000
-        conn.doOutput = true
-
-        conn.outputStream.use { it.write(requestBody.toByteArray()) }
-        log.info("[CopilotReview] callCopilotForReview: Request sent to ${conn.url}")
-
-        val responseCode = conn.responseCode
-        log.info("[CopilotReview] callCopilotForReview: Response code = $responseCode")
-        if (responseCode != 200) {
-            val errorBody = try {
-                conn.errorStream?.bufferedReader()?.readText() ?: "no error body"
-            } catch (_: Exception) { "unreadable" }
-            log.warn("[CopilotReview] callCopilotForReview: API error $responseCode: $errorBody")
-            throw RuntimeException("Copilot API returned $responseCode: $errorBody")
-        }
-
-        val responseBody = conn.inputStream.bufferedReader().readText()
-        log.info("[CopilotReview] callCopilotForReview: Response body length = ${responseBody.length}")
-        return extractReviewFromChatResponse(responseBody)
-    }
-
-    private fun getCopilotApiToken(): String {
-        // Return cached token if still valid (with 5 min buffer)
-        if (cachedToken != null && System.currentTimeMillis() / 1000 < tokenExpiry - 300) {
-            log.info("[CopilotReview] getCopilotApiToken: Using cached token (expires_at=$tokenExpiry)")
-            return cachedToken!!
-        }
-
-        // Read the GitHub OAuth token from Copilot's config
-        log.info("[CopilotReview] getCopilotApiToken: Looking for OAuth token in Copilot config files...")
-        val oauthToken = readCopilotOAuthToken()
-        if (oauthToken == null) {
-            log.warn("[CopilotReview] getCopilotApiToken: No OAuth token found in any config file")
-            throw IllegalStateException(
-                "Could not find GitHub Copilot OAuth token. Make sure you are signed in to GitHub Copilot."
-            )
-        }
-        log.info("[CopilotReview] getCopilotApiToken: Found OAuth token (${oauthToken.take(8)}...)")
-
-        // Exchange OAuth token for a Copilot API session token
-        log.info("[CopilotReview] getCopilotApiToken: Exchanging OAuth token for API session token...")
-        val url = URI("https://api.github.com/copilot_internal/v2/token").toURL()
-        val conn = url.openConnection() as HttpURLConnection
-        conn.requestMethod = "GET"
-        conn.setRequestProperty("Authorization", "token $oauthToken")
-        conn.setRequestProperty("Accept", "application/json")
-        conn.setRequestProperty("User-Agent", "CopilotCodeReview-IntelliJ/0.0.1")
-        conn.connectTimeout = 10000
-        conn.readTimeout = 10000
-
-        val responseCode = conn.responseCode
-        log.info("[CopilotReview] getCopilotApiToken: Token exchange response code = $responseCode")
-        if (responseCode != 200) {
-            val errorBody = try {
-                conn.errorStream?.bufferedReader()?.readText() ?: ""
-            } catch (_: Exception) { "" }
-            log.warn("[CopilotReview] getCopilotApiToken: Token exchange failed: $errorBody")
-            throw RuntimeException("Failed to get Copilot token (HTTP $responseCode): $errorBody")
-        }
-
-        val responseBody = conn.inputStream.bufferedReader().readText()
-        val json = JsonParser.parseString(responseBody).asJsonObject
-        cachedToken = json.get("token").asString
-        tokenExpiry = json.get("expires_at").asLong
-        log.info("[CopilotReview] getCopilotApiToken: Session token obtained, expires_at=$tokenExpiry")
-
-        return cachedToken!!
-    }
-
-    private fun readCopilotOAuthToken(): String? {
-        // Copilot stores OAuth tokens in well-known config locations
-        val homeDir = System.getProperty("user.home")
-
-        // Try the standard locations where Copilot stores credentials
-        val configPaths = listOf(
-            "$homeDir/.config/github-copilot/hosts.json",
-            "$homeDir/.config/github-copilot/apps.json",
-            "$homeDir/Library/Application Support/github-copilot/hosts.json",
-            "$homeDir/Library/Application Support/github-copilot/apps.json"
+        // Use the Copilot plugin's chat service — handles auth, proxy, and network
+        val chatService = com.github.copilot.chat.CopilotChatService.getInstance(project)
+        val messages = listOf(
+            com.github.copilot.chat.ChatMessage(com.github.copilot.chat.ChatRole.SYSTEM, "You are a code reviewer. You respond only with valid JSON arrays."),
+            com.github.copilot.chat.ChatMessage(com.github.copilot.chat.ChatRole.USER, prompt)
         )
+        val response = chatService.chat(messages, "gpt-4o")
 
-        for (path in configPaths) {
-            val file = File(path)
-            if (!file.exists()) continue
-
-            try {
-                val content = file.readText()
-                val json = JsonParser.parseString(content).asJsonObject
-
-                // hosts.json format: {"github.com": {"oauth_token": "..."}}
-                for (key in json.keySet()) {
-                    val entry = json.get(key)
-                    if (entry != null && entry.isJsonObject) {
-                        val obj = entry.asJsonObject
-                        if (obj.has("oauth_token")) {
-                            return obj.get("oauth_token").asString
-                        }
-                    }
-                }
-
-                // apps.json format may have the token directly
-                if (json.has("oauth_token")) {
-                    return json.get("oauth_token").asString
-                }
-            } catch (e: Exception) {
-                log.info("Could not read Copilot config at $path: ${e.message}")
-            }
-        }
-
-        return null
-    }
-
-    private fun extractReviewFromChatResponse(responseBody: String): List<ReviewIssue> {
-        val json = JsonParser.parseString(responseBody).asJsonObject
-        val choices = json.getAsJsonArray("choices")
-        if (choices == null || choices.size() == 0) return emptyList()
-
-        val message = choices[0].asJsonObject.getAsJsonObject("message")
-        val content = message.get("content")?.asString ?: return emptyList()
-
-        return parseResponse(content)
+        log.info("[CopilotReview] callCopilotForReview: Got response, length=${response.length}")
+        return parseResponse(response)
     }
 
     private fun buildReviewPrompt(code: String, fileName: String, lang: String): String {
@@ -329,7 +188,7 @@ $code"""
                 ReviewIssue(line, severity, message)
             }
         } catch (e: Exception) {
-            log.warn("Failed to parse review response: ${e.message}")
+            log.warn("[CopilotReview] Failed to parse review response: ${e.message}")
             emptyList()
         }
     }
