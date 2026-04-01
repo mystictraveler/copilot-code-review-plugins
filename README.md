@@ -11,7 +11,7 @@ VS Code extension and IntelliJ plugin that automatically review your code using 
 | Plugin | Version | Download |
 |--------|---------|----------|
 | IntelliJ | v0.1.24 | [copilot-code-review-0.1.24.zip](https://github.com/mystictraveler/copilot-code-review-plugins/releases/download/intellij-v0.1.24/copilot-code-review-0.1.24.zip) |
-| VS Code | latest | [Releases](https://github.com/mystictraveler/copilot-code-review-plugins/releases?q=vscode) |
+| VS Code | v0.1.7 | [copilot-code-review-0.1.7.vsix](https://github.com/mystictraveler/copilot-code-review-plugins/releases/download/vscode-v0.1.7/copilot-code-review-0.1.7.vsix) |
 <!-- LATEST_RELEASES_END -->
 
 Both plugins share the same core workflow: save a file, wait for a configurable debounce delay, send the file contents to Copilot for review, parse the structured JSON response, and display the results inline in the editor and in a formatted panel.
