@@ -13,9 +13,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: intellij
 
     steps:
       - uses: actions/checkout@v4
@@ -26,7 +23,14 @@ jobs:
           java-version: '17'
           cache: 'gradle'
 
+      - name: Clone and build LM API dependency
+        run: |
+          git clone https://github.com/mystictraveler/intellij-lm-api.git ../intellij-lm-api
+          cd ../intellij-lm-api
+          ./gradlew buildPlugin
+
       - name: Build plugin
+        working-directory: intellij
         run: ./gradlew buildPlugin
 
       - name: Upload plugin artifact
