@@ -21,7 +21,7 @@ dependencies {
         plugin("com.github.copilot", "1.7.1-243")
         instrumentationTools()
     }
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
+    compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
 }
 
 kotlin {
