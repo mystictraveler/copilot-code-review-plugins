@@ -12,6 +12,7 @@ Require-Bundle: org.eclipse.ui,
  org.eclipse.jface.text,
  org.eclipse.ui.ide,
  org.eclipse.ui.console,
+ org.eclipse.core.net,
  com.google.gson;bundle-version="2.10.0"
 Bundle-RequiredExecutionEnvironment: JavaSE-17
 Automatic-Module-Name: com.copilotreview.eclipse
