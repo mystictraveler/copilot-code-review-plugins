@@ -101,6 +101,8 @@ npx @vscode/vsce package --allow-missing-repository
 
 ## IntelliJ Plugin
 
+> **Note:** The IntelliJ plugin may not work reliably behind corporate proxies. While HTTP calls are routed through `HttpConfigurable` (IDE proxy settings), some corporate proxy configurations — particularly those requiring NTLM authentication, SSL inspection, or PAC-based auto-configuration — may not be fully supported. If you encounter connectivity issues, verify your proxy settings under **Settings > Appearance & Behavior > System Settings > HTTP Proxy**.
+
 ### How It Works
 
 The plugin uses the IntelliJ Language Model API (`com.intellij.lm`) to access LLM capabilities. It includes a built-in Copilot LM provider (`CopilotLmProvider`) that registers with the LM API via the `com.intellij.lm.provider` extension point. This provider bridges GitHub Copilot's chat completions API into the IntelliJ LM framework, making Copilot models (GPT-4o, GPT-4o Mini, o3-mini, Claude Sonnet 4.5) available through the standard `LmService.selectChatModels()` interface.
