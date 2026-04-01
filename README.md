@@ -228,6 +228,18 @@ Both plugins have GitHub Actions workflows that build on push and pull request:
 
 Both workflows are scoped to only trigger when files in their respective directories change.
 
+## Known Issues
+
+### IntelliJ Plugin
+
+- **Token cache race condition** -- The cached Copilot API token uses `@Volatile` but the null-check-then-use pattern is not fully thread-safe under concurrent reviews. In practice this is unlikely to cause issues since reviews are debounced.
+- **Tool window panel memory leak** -- The `ReviewToolWindowPanel.instances` map is never cleaned up on project close, which can leak panel references in long-running IDE sessions with many project open/close cycles.
+- **Corporate proxy limitations** -- Some corporate proxy configurations (NTLM auth, SSL inspection, PAC-based auto-config) may not be fully supported by `HttpConfigurable`.
+
+### VS Code Extension
+
+- No known issues at this time.
+
 ## Related Projects
 
 - **[intellij-lm-api](https://github.com/mystictraveler/intellij-lm-api)** -- provides the `com.intellij.lm` Language Model API extension point for IntelliJ. This is a required dependency for the IntelliJ plugin.
