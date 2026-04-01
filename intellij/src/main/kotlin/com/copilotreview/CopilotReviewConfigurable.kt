@@ -10,6 +10,7 @@ class CopilotReviewConfigurable(private val project: Project) : Configurable {
     private var debounceField: JTextField? = null
     private var excludedField: JTextField? = null
     private var scopeCombo: JComboBox<String>? = null
+    private var modelCombo: JComboBox<String>? = null
 
     override fun getDisplayName(): String = "Copilot Code Review"
 
@@ -46,6 +47,22 @@ class CopilotReviewConfigurable(private val project: Project) : Configurable {
         scopePanel.add(scopeCombo)
         scopePanel.add(Box.createHorizontalGlue())
         panel.add(scopePanel)
+        panel.add(Box.createVerticalStrut(10))
+
+        val modelPanel = JPanel().apply { layout = BoxLayout(this, BoxLayout.X_AXIS) }
+        modelPanel.add(JLabel("Model: "))
+        modelCombo = JComboBox(arrayOf(
+            "claude-opus-4-6",
+            "claude-sonnet-4-6",
+            "claude-haiku-4-5-20251001",
+            "gpt-4o",
+            "gpt-4o-mini",
+            "o3-mini"
+        ))
+        modelCombo!!.selectedItem = settings.model
+        modelPanel.add(modelCombo)
+        modelPanel.add(Box.createHorizontalGlue())
+        panel.add(modelPanel)
 
         panel.add(Box.createVerticalGlue())
         return panel
@@ -57,6 +74,7 @@ class CopilotReviewConfigurable(private val project: Project) : Configurable {
                 || debounceField?.text != settings.debounceMs.toString()
                 || excludedField?.text != settings.excludedExtensions
                 || scopeCombo?.selectedItem != settings.scope
+                || modelCombo?.selectedItem != settings.model
     }
 
     override fun apply() {
@@ -65,7 +83,8 @@ class CopilotReviewConfigurable(private val project: Project) : Configurable {
             enabled = enabledCheckbox?.isSelected ?: true,
             debounceMs = debounceField?.text?.toLongOrNull() ?: 2000,
             excludedExtensions = excludedField?.text ?: "txt",
-            scope = scopeCombo?.selectedItem as? String ?: "file"
+            scope = scopeCombo?.selectedItem as? String ?: "file",
+            model = modelCombo?.selectedItem as? String ?: "claude-opus-4-6"
         ))
     }
 
@@ -75,5 +94,6 @@ class CopilotReviewConfigurable(private val project: Project) : Configurable {
         debounceField?.text = settings.debounceMs.toString()
         excludedField?.text = settings.excludedExtensions
         scopeCombo?.selectedItem = settings.scope
+        modelCombo?.selectedItem = settings.model
     }
 }

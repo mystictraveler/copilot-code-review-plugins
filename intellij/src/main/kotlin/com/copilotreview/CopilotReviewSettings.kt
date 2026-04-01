@@ -11,7 +11,8 @@ class CopilotReviewSettings : PersistentStateComponent<CopilotReviewSettings.Sta
         var enabled: Boolean = true,
         var debounceMs: Long = 2000,
         var excludedExtensions: String = "txt",
-        var scope: String = "file" // "file" or "project"
+        var scope: String = "file", // "file" or "project"
+        var model: String = "claude-opus-4-6" // model id to use for reviews
     )
 
     private var myState = State()

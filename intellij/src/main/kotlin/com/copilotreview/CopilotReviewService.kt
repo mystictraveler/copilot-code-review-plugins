@@ -97,8 +97,12 @@ class CopilotReviewService(private val project: Project) {
     }
 
     private fun callLmForReview(code: String, fileName: String, lang: String): List<ReviewIssue> {
+        val settings = CopilotReviewSettings.getInstance(project).state
+        val modelId = settings.model
+
         val lm = LmService.getInstance()
-        val models = runBlocking { lm.selectChatModels(LmModelSelector(family = "gpt-4o")) }
+        val models = runBlocking { lm.selectChatModels(LmModelSelector(id = modelId)) }
+            .ifEmpty { runBlocking { lm.selectChatModels() } }
 
         if (models.isEmpty()) {
             throw IllegalStateException("No language model available. Install an LM provider plugin (e.g. LM Copilot Bridge).")
