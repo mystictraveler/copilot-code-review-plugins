@@ -2,14 +2,28 @@ package com.copilotreview
 
 import com.intellij.ide.plugins.PluginManagerCore
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.actionSystem.impl.SimpleDataContext
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.extensions.PluginId
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.openapi.wm.ToolWindowManager
+import com.github.copilot.api.CopilotChatService
+import com.github.copilot.agent.conversation.listener.CopilotAgentConversationProgressListener
+import com.github.copilot.agent.conversation.listener.CopilotAgentConversationProgressListener.Companion
+import com.github.copilot.agent.messageBus.CopilotMessageBus
+import com.github.copilot.chat.conversation.agent.rpc.ChatAnnotation
+import com.github.copilot.chat.conversation.agent.rpc.ChatNotification
+import com.github.copilot.chat.conversation.agent.rpc.ConfirmationRequest
+import com.github.copilot.chat.conversation.agent.rpc.Reference
+import com.github.copilot.chat.conversation.agent.rpc.UpdatedDocument
+import com.github.copilot.chat.conversation.agent.rpc.message.AgentRound
+import com.github.copilot.chat.conversation.agent.rpc.message.ContextSizeInfo
+import com.github.copilot.chat.conversation.agent.rpc.message.Step
+import com.github.copilot.chat.conversation.agent.rpc.message.Thinking
+import com.github.copilot.chat.message.references.ChatReference
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
-import com.intellij.openapi.wm.ToolWindowManager
-import com.github.copilot.CopilotPlugin
 import java.io.File
 import java.util.Date
 import java.util.Timer
@@ -86,67 +100,91 @@ class CopilotReviewService(private val project: Project) {
         log.info("[CopilotReview] reviewFile: Starting review for ${file.name}")
         statusCallback?.invoke("Reviewing...")
 
-        Thread {
-            try {
-                val (content, lineCount) = ApplicationManager.getApplication().runReadAction<Pair<String, Int>> {
-                    val text = String(file.contentsToByteArray())
-                    val lines = text.count { it == '\n' } + 1
-                    Pair(text, lines)
-                }
-                val fileName = file.name
-                val lang = file.fileType.name
-                log.info("[CopilotReview] reviewFile: Read ${content.length} chars, $lineCount lines, lang=$lang")
+        val content = ApplicationManager.getApplication().runReadAction<String> {
+            String(file.contentsToByteArray())
+        }
+        val fileName = file.name
+        val lang = file.fileType.name
+        val lineCount = content.count { it == '\n' } + 1
+        log.info("[CopilotReview] reviewFile: Read ${content.length} chars, $lineCount lines, lang=$lang")
 
-                log.info("[CopilotReview] reviewFile: Calling Copilot via plugin...")
-                val issues = callCopilotForReview(content, fileName, lang)
-                log.info("[CopilotReview] reviewFile: Got ${issues.size} issue(s) from Copilot")
+        val prompt = buildReviewPrompt(content, fileName, lang)
 
-                for (issue in issues) {
-                    log.info("[CopilotReview]   Line ${issue.line} [${issue.severity}]: ${issue.message}")
-                }
+        // Subscribe to Copilot's message bus to capture the reply
+        val replyBuilder = StringBuilder()
+        val chatService = project.getService(CopilotChatService::class.java)
+        val dataContext = SimpleDataContext.getProjectContext(project)
+
+        val listener = object : CopilotAgentConversationProgressListener {
+            override fun onReply(reply: String, annotations: List<ChatAnnotation>, parentTurnId: String?) {
+                log.info("[CopilotReview] onReply: received ${reply.length} chars")
+                replyBuilder.append(reply)
+            }
+
+            override fun onCompleted() {
+                log.info("[CopilotReview] onCompleted: total reply ${replyBuilder.length} chars")
+                val fullReply = replyBuilder.toString()
+                val issues = parseResponse(fullReply)
+                log.info("[CopilotReview] onCompleted: parsed ${issues.size} issue(s)")
+
+                reviewInProgress.remove(path)
 
                 ApplicationManager.getApplication().invokeLater {
                     ReviewAnnotator.applyAnnotations(project, path, issues, lineCount)
                     statusCallback?.invoke(if (issues.isEmpty()) "No issues" else "${issues.size} issue(s)")
 
                     val result = ReviewResult(fileName, path, issues, Date())
-
                     val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Copilot Review")
-                    log.info("[CopilotReview] reviewFile: toolWindow=${if (toolWindow != null) "found" else "NOT FOUND"}")
                     toolWindow?.show {
-                        log.info("[CopilotReview] reviewFile: Tool window shown, updating panel")
                         ReviewToolWindowPanel.update(project, result)
                     }
-                    if (toolWindow == null) {
-                        log.warn("[CopilotReview] reviewFile: Tool window 'Copilot Review' not registered — results will not be displayed")
-                    }
                 }
-            } catch (e: Exception) {
-                log.warn("[CopilotReview] reviewFile: FAILED — ${e.message}", e)
-                ApplicationManager.getApplication().invokeLater {
-                    statusCallback?.invoke("Review failed: ${e.message}")
-                }
-            } finally {
-                reviewInProgress.remove(path)
             }
-        }.start()
-    }
 
-    private fun callCopilotForReview(code: String, fileName: String, lang: String): List<ReviewIssue> {
-        val prompt = buildReviewPrompt(code, fileName, lang)
+            override fun onError(message: String, code: Int?, type: String?, param: String?, details: String?) {
+                log.warn("[CopilotReview] onError: ($code) $message")
+                reviewInProgress.remove(path)
+                ApplicationManager.getApplication().invokeLater {
+                    statusCallback?.invoke("Review failed: $message")
+                }
+            }
 
-        log.info("[CopilotReview] callCopilotForReview: Sending chat request via Copilot plugin...")
+            override fun onCancel() {
+                log.info("[CopilotReview] onCancel")
+                reviewInProgress.remove(path)
+                ApplicationManager.getApplication().invokeLater {
+                    statusCallback?.invoke("Review cancelled")
+                }
+            }
 
-        // Use the Copilot plugin's chat service — handles auth, proxy, and network
-        val chatService = com.github.copilot.chat.CopilotChatService.getInstance(project)
-        val messages = listOf(
-            com.github.copilot.chat.ChatMessage(com.github.copilot.chat.ChatRole.SYSTEM, "You are a code reviewer. You respond only with valid JSON arrays."),
-            com.github.copilot.chat.ChatMessage(com.github.copilot.chat.ChatRole.USER, prompt)
-        )
-        val response = chatService.chat(messages, "gpt-4o")
+            // No-op for events we don't care about
+            override fun onConversationIdReply(id: String, isNew: Boolean) {}
+            override fun onTurnIdReply(turnId: String, parentTurnId: String?) {}
+            override fun onModelInformationReply(modelName: String?, modelProviderName: String?, modelBillingMultiplier: String?) {}
+            override fun onSteps(steps: List<Step>, parentTurnId: String?) {}
+            override fun onConfirmationRequest(request: ConfirmationRequest) {}
+            override fun onNotifications(notifications: List<ChatNotification>) {}
+            override fun onUpdatedDocuments(documents: List<UpdatedDocument>) {}
+            override fun onReferences(references: List<ChatReference>, parentTurnId: String?) {}
+            override fun onEditAgentRound(editAgentRound: AgentRound, parentTurnId: String?) {}
+            override fun onThinking(thinking: Thinking, parentTurnId: String?) {}
+            override fun onContextSizeUpdated(info: ContextSizeInfo) {}
+            override fun onThinkingComplete(parentTurnId: String?) {}
+            override fun onFilter(filter: String) {}
+            override fun onSuggestedTitle(title: String) {}
+        }
 
-        log.info("[CopilotReview] callCopilotForReview: Got response, length=${response.length}")
-        return parseResponse(response)
+        // Subscribe to progress events before sending the query
+        val messageBus = project.getService(CopilotMessageBus::class.java)
+        messageBus.subscribe(CopilotAgentConversationProgressListener.Companion.TOPIC, listener, project)
+
+        log.info("[CopilotReview] reviewFile: Sending query via Copilot Chat...")
+        chatService.query(dataContext) {
+            withInput(prompt)
+            withAskMode()
+            withNewSession()
+            withContextFiles(file)
+        }
     }
 
     private fun buildReviewPrompt(code: String, fileName: String, lang: String): String {

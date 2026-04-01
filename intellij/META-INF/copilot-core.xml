@@ -1,0 +1,656 @@
+<idea-plugin>
+    <resource-bundle>copilot.copilot</resource-bundle>
+
+    <extensionPoints>
+        <extensionPoint qualifiedName="com.github.copilot.editorSupport"
+                        interface="com.github.copilot.editor.CopilotEditorSupport"
+                        dynamic="true"/>
+        <extensionPoint qualifiedName="com.github.copilot.api.mcp.mcpServerProvider"
+                        interface="com.github.copilot.api.mcp.McpServerProvider"
+                        dynamic="true"/>
+    </extensionPoints>
+
+    <applicationListeners>
+        <listener topic="com.intellij.openapi.actionSystem.ex.AnActionListener"
+                  class="com.github.copilot.editor.CopilotEditorActionTracker$ActionListener"
+                  activeInTestMode="true" activeInHeadlessMode="true"/>
+        <listener topic="com.github.copilot.editor.CopilotInlayListener"
+                  class="com.github.copilot.editor.CopilotInlayGotItListener"/>
+        <listener topic="com.intellij.ide.plugins.DynamicPluginListener"
+                  class="com.github.copilot.CopilotPluginUnloadListener"/>
+        <listener class="com.github.copilot.status.ToolBarActionMenuListener"
+                  topic="com.github.copilot.status.CopilotStatusListener"/>
+        <listener class="com.github.copilot.mcp.agent.McpConfigurationApplier"
+                  topic="com.github.copilot.lang.agent.McpConfigurationListener"/>
+        <listener class="com.github.copilot.mcp.agent.McpRuntimeLogApplier"
+                  topic="com.github.copilot.lang.agent.McpRuntimeLogsListener"/>
+        <listener class="com.github.copilot.copilotInstructions.agent.CopilotInstructionsConfigurationApplier"
+                  topic="com.github.copilot.lang.agent.CopilotInstructionsConfigurationListener"/>
+    </applicationListeners>
+
+    <projectListeners>
+        <listener topic="com.intellij.codeInsight.lookup.LookupManagerListener"
+                  class="com.github.copilot.editor.CopilotLookupListener"/>
+        <listener topic="com.intellij.openapi.command.CommandListener"
+                  class="com.github.copilot.editor.CopilotCommandListener"/>
+        <listener topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"
+                  class="com.github.copilot.editor.EditorFocusListener"/>
+        <listener topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"
+                  class="com.github.copilot.toolWindow.OpenCopilotEditorManagerListener"/>
+
+        <!-- LSP support -->
+        <listener topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"
+                  class="com.github.copilot.lsp.LSPEditorListener"/>
+        <listener topic="com.intellij.openapi.fileEditor.FileOpenedSyncListener"
+                  class="com.github.copilot.lsp.LSPEditorListener"/>
+        <listener topic="com.intellij.openapi.project.ProjectManagerListener"
+                  class="com.github.copilot.lang.agent.lsp.WorkspaceFolderListener"/>
+        <listener topic="com.intellij.openapi.project.ModuleListener"
+                  class="com.github.copilot.lang.agent.lsp.WorkspaceFolderListener"/>
+
+        <listener topic="com.intellij.openapi.project.ProjectManagerListener"
+                  class="com.github.copilot.mstelemetry.ProjectCloseListener"/>
+        <listener topic="com.intellij.openapi.project.ProjectManagerListener"
+                  class="com.github.copilot.template.PromptTemplateProjectLifecycleListener"/>
+    </projectListeners>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <vfs.asyncListener implementation="com.github.copilot.lsp.LSPAsyncFileChangesListener"/>
+        <postStartupActivity implementation="com.github.copilot.mcp.McpJsonFileTypeDetector"/>
+        <postStartupActivity implementation="com.github.copilot.startup.CopilotStartupActivity"/>
+        <postStartupActivity implementation="com.github.copilot.template.PromptTemplateProjectLifecycleListener"/>
+
+        <applicationService serviceImplementation="com.github.copilot.settings.CopilotApplicationSettings"/>
+        <applicationService serviceImplementation="com.github.copilot.settings.CopilotLocalApplicationSettings"/>
+        <applicationService serviceImplementation="com.github.copilot.toolWindow.OpenCopilotToolWindowManager"/>
+        <applicationService serviceImplementation="com.github.copilot.status.CopilotStatusService"/>
+        <applicationService serviceInterface="com.github.copilot.featureflags.FeatureFlagService"
+                            serviceImplementation="com.github.copilot.featureflags.FeatureFlagServiceImpl"/>
+        <applicationService serviceInterface="com.github.copilot.policy.CopilotPolicyService"
+                            serviceImplementation="com.github.copilot.policy.CopilotPolicyServiceImpl"/>
+        <applicationService serviceImplementation="com.github.copilot.featureflags.ManagedFeatureService"/>
+        <applicationService serviceImplementation="com.github.copilot.editor.CopilotEditorActionTracker"/>
+        <applicationService serviceImplementation="com.github.copilot.chat.inline.InlineChatService"/>
+        <applicationService serviceImplementation="com.github.copilot.mcp.tools.toolWindow.CopilotMCPLogService"/>
+        <applicationService
+                serviceInterface="com.github.copilot.editor.CopilotEditorManager"
+                serviceImplementation="com.github.copilot.editor.CopilotEditorManagerImpl"
+                testServiceImplementation="com.github.copilot.editor.CopilotEditorTestManager"/>
+        <applicationService
+                serviceInterface="com.github.copilot.completions.CopilotCompletionService"
+                serviceImplementation="com.github.copilot.lang.agent.CopilotAgentCompletionService"
+                testServiceImplementation="com.github.copilot.completions.CopilotCompletionTestService"/>
+        <applicationService
+                serviceInterface="com.github.copilot.telemetry.TelemetryService"
+                serviceImplementation="com.github.copilot.telemetry.EnablingTelemetryService"
+                testServiceImplementation="com.github.copilot.telemetry.TestTelemetryService"/>
+        <applicationService
+                serviceInterface="com.github.copilot.telemetry.ErrorReportService"
+                serviceImplementation="com.github.copilot.telemetry.GitHubPanicErrorReportService"
+                testServiceImplementation="com.github.copilot.telemetry.TestErrorReportService"/>
+        <applicationService
+                serviceInterface="com.github.copilot.lang.agent.CopilotAgentProcessService"
+                serviceImplementation="com.github.copilot.lang.agent.RestartableCopilotAgentProcessService"
+                testServiceImplementation="com.github.copilot.lang.agent.CopilotAgentProcessTestService"/>
+        <applicationService serviceImplementation="com.github.copilot.lsp.LSPManager"/>
+        <applicationService serviceImplementation="com.github.copilot.nes.controller.NextEditSuggestionsManager"/>
+        <applicationService serviceImplementation="com.github.copilot.nes.service.NextEditSuggestionsService"/>
+        <applicationService serviceImplementation="com.github.copilot.nes.service.NextEditSuggestionsTelemetryService"/>
+        <applicationService serviceImplementation="com.github.copilot.nes.handlers.NextEditSuggestionsKeyboardHandler"/>
+        <applicationService
+                serviceInterface="com.github.copilot.chat.precondition.ChatPreconditionsService"
+                serviceImplementation="com.github.copilot.chat.precondition.ChatPreconditionsServiceImpl"/>
+        <applicationService
+                serviceInterface="com.github.copilot.contentexclusion.ContentExclusionStatusService"
+                serviceImplementation="com.github.copilot.contentexclusion.ContentExclusionStatusServiceImpl"/>
+        <applicationService
+                serviceInterface="com.github.copilot.chat.conversation.agent.tool.ToolRegistry"
+                serviceImplementation="com.github.copilot.chat.conversation.agent.tool.ToolRegistryImpl"/>
+        <applicationService
+                serviceInterface="com.github.copilot.template.PromptTemplateService"
+                serviceImplementation="com.github.copilot.template.PromptTemplateServiceImpl"/>
+        <postStartupActivity implementation="com.github.copilot.contentexclusion.ContentExclusionProjectActivity"/>
+
+        <errorHandler implementation="com.github.copilot.telemetry.CopilotErrorHandler"/>
+
+        <projectService serviceInterface="com.github.copilot.api.CopilotChatService"
+                        serviceImplementation="com.github.copilot.api.CopilotChatServiceImpl"/>
+        <projectService serviceInterface="com.github.copilot.api.CopilotAuthService"
+                        serviceImplementation="com.github.copilot.api.CopilotAuthServiceImpl"/>
+        <projectService serviceImplementation="com.github.copilot.settings.CopilotWorkspaceSettings"/>
+
+        <!-- GitHub Copilot OAuth -->
+        <applicationService serviceInterface="com.github.copilot.github.GitHubService"
+                            serviceImplementation="com.github.copilot.lang.agent.AgentGitHubService"/>
+        <applicationService serviceInterface="com.github.copilot.status.CopilotAuthStatusService"
+                            serviceImplementation="com.github.copilot.lang.agent.AgentGitHubService"/>
+        <postStartupActivity implementation="com.github.copilot.github.GitHubAuthStartupActivity"/>
+        <postStartupActivity implementation="com.github.copilot.activities.CopilotQuotaServiceStartupActivity"/>
+        <postStartupActivity implementation="com.github.copilot.chat.window.CopilotChatWindowStartupActivity"/>
+        <postStartupActivity implementation="com.github.copilot.update.CopilotUpdateStartupActivity"/>
+        <postStartupActivity implementation="com.github.copilot.update.CopilotNightlyAgentChannelStartupActivity"/>
+
+        <!-- settings -->
+        <applicationConfigurable parentId="tools"
+                                 provider="com.github.copilot.settings.ApplicationConfigurableProvider"
+                                 id="com.github.copilot.settings.ApplicationConfigurable"
+                                 key="applicationConfigurable.displayName"/>
+        <applicationConfigurable parentId="com.github.copilot.settings.ApplicationConfigurable"
+                                 provider="com.github.copilot.settings.general.GeneralConfigurableProvider"
+                                 id="com.github.copilot.settings.general.GeneralConfigurable"
+                                 key="applicationConfigurable.generalConfigurable.displayName"
+                                 order="first"/>
+        <applicationConfigurable parentId="com.github.copilot.settings.ApplicationConfigurable"
+                                 provider="com.github.copilot.settings.chat.ChatConfigurableProvider"
+                                 id="com.github.copilot.settings.chat.ChatConfigurable"
+                                 key="applicationConfigurable.chatConfigurable.displayName"
+                                 order="after com.github.copilot.settings.general.GeneralConfigurable"/>
+        <applicationConfigurable parentId="com.github.copilot.settings.ApplicationConfigurable"
+                                 provider="com.github.copilot.settings.completions.CompletionsConfigurableProvider"
+                                 id="com.github.copilot.settings.completions.CompletionsConfigurable"
+                                 key="applicationConfigurable.completionsConfigurable.displayName"
+                                 order="after com.github.copilot.settings.chat.ChatConfigurable"/>
+        <applicationConfigurable parentId="com.github.copilot.settings.ApplicationConfigurable"
+                                 provider="com.github.copilot.settings.customization.CustomizationConfigurableProvider"
+                                 id="com.github.copilot.settings.customization.CustomizationConfigurable"
+                                 key="applicationConfigurable.copilotInstructionsConfigurable.displayName"
+                                 order="after com.github.copilot.settings.completions.CompletionsConfigurable"/>
+        <applicationConfigurable parentId="com.github.copilot.settings.ApplicationConfigurable"
+                                 provider="com.github.copilot.settings.keymap.KeymapConfigurableProvider"
+                                 id="com.github.copilot.settings.keymap.KeymapConfigurable"
+                                 key="applicationConfigurable.keymapConfigurable.displayName"
+                                 order="after com.github.copilot.settings.customization.CustomizationConfigurable"/>
+        <applicationConfigurable parentId="com.github.copilot.settings.ApplicationConfigurable"
+                                 provider="com.github.copilot.settings.mcp.McpConfigurableProvider"
+                                 id="com.github.copilot.settings.mcp.McpConfigurable"
+                                 key="applicationConfigurable.mcpConfigurable.displayName"
+                                 order="after com.github.copilot.settings.keymap.KeymapConfigurable"/>
+        <applicationConfigurable parentId="com.github.copilot.settings.ApplicationConfigurable"
+                                 provider="com.github.copilot.settings.network.NetworkConfigurableProvider"
+                                 id="com.github.copilot.settings.network.NetworkConfigurable"
+                                 key="applicationConfigurable.networkConfigurable.displayName"
+                                 order="after com.github.copilot.settings.mcp.McpConfigurable"/>
+        <notificationGroup id="GitHub Copilot" displayType="BALLOON"
+                           key="notifications.copilot.group.name"/>
+        <codeInsight.codeVisionProvider implementationClass="com.github.copilot.mcp.editor.McpConfigurationCodeVisionProvider"/>
+        <!-- MCP Server Action Code Vision Providers - Multiple providers to display actions side by side -->
+        <codeInsight.codeVisionProvider implementationClass="com.github.copilot.mcp.editor.McpServerMoreActionsCodeVisionProvider"/>
+        <codeInsight.codeVisionProvider implementationClass="com.github.copilot.mcp.editor.McpServerInfoCodeVisionProvider"/>
+        <codeInsight.codeVisionProvider implementationClass="com.github.copilot.mcp.editor.McpServerRestartActionCodeVisionProvider"/>
+        <codeInsight.codeVisionProvider implementationClass="com.github.copilot.mcp.editor.McpServerStopActionCodeVisionProvider"/>
+        <codeInsight.codeVisionProvider implementationClass="com.github.copilot.mcp.editor.McpServerStartActionCodeVisionProvider"/>
+        <codeInsight.codeVisionProvider implementationClass="com.github.copilot.mcp.editor.McpServerViewErrorActionCodeVisionProvider"/>
+        <codeInsight.codeVisionProvider implementationClass="com.github.copilot.mcp.editor.McpServerStartingStatusCodeVisionProvider"/>
+        <codeInsight.codeVisionProvider implementationClass="com.github.copilot.mcp.editor.McpServerBlockedStatusCodeVisionProvider"/>
+        <codeInsight.codeVisionProvider implementationClass="com.github.copilot.mcp.editor.McpServerRunningStatusCodeVisionProvider"/>
+        
+        <!-- Code Vision Group Settings -->
+        <config.codeVisionGroupSettingProvider implementation="com.github.copilot.mcp.editor.McpCodeVisionGroupSettingProvider"/>
+        <config.codeVisionGroupSettingProvider implementation="com.github.copilot.mcp.editor.McpConfigurationCodeVisionGroupSettingProvider"/>
+        
+        <!-- Code Vision Preview Language -->
+        <codeInsight.codeVisionSettingsPreviewLanguage language="JSON" modelId="com.github.copilot.mcp.editor.McpServerActions"/>
+        <codeInsight.codeVisionSettingsPreviewLanguage language="JSON" modelId="com.github.copilot.mcp.editor.McpConfiguration"/>
+
+        <!-- status bar -->
+        <statusBarWidgetFactory id="github.copilot.statusBarWidgetFactory"
+                                implementation="com.github.copilot.statusBar.CopilotWidgetFactory"/>
+        <!-- inspection widget status bar -->
+        <iw.actionProvider id="github.copilot.statusBarWidgetActionProvider"
+                           implementation="com.github.copilot.status.InspectionWidgetStatusProvider"/>
+        <!-- Open Copilot -->
+        <toolWindow id="github.copilotToolWindow"
+                    doNotActivateOnStart="true"
+                    anchor="right"
+                    secondary="false"
+                    canCloseContents="true"
+                    icon="com.github.copilot.CopilotIcons.CopilotCompletionsToolWindow"
+                    factoryClass="com.github.copilot.toolWindow.OpenCopilotToolWindowFactory"/>
+        <readerModeMatcher order="first"
+                           implementation="com.github.copilot.toolWindow.OpenCopilotDisableReaderModeMatcher"/>
+
+        <!-- Copilot Chat -->
+        <toolWindow id="GitHub Copilot Chat"
+                    doNotActivateOnStart="true"
+                    anchor="right"
+                    secondary="false"
+                    canCloseContents="false"
+                    icon="com.github.copilot.CopilotIcons.CopilotToolWindow"
+                    factoryClass="com.github.copilot.chat.window.CopilotChatToolWindowFactory"/>
+
+        <!-- MCP Runtime Log -->
+        <toolWindow id="GitHub Copilot MCP Log"
+                    anchor="bottom"
+                    secondary="false"
+                    canCloseContents="false"
+                    icon="com.github.copilot.CopilotIcons.McpTools"
+                    factoryClass="com.github.copilot.mcp.tools.toolWindow.CopilotMCPLogToolWindowFactory"
+                    doNotActivateOnStart="true"/>
+
+        <!-- GitHub Coding Agent Jobs -->
+        <toolWindow id="GitHub Coding Agent Jobs"
+                    anchor="right"
+                    secondary="false"
+                    canCloseContents="false"
+                    icon="com.github.copilot.CopilotIcons.CodingAgent"
+                    factoryClass="com.github.copilot.github.codingAgent.toolWindow.GitHubCodingAgentJobsToolWindowFactory"
+                    doNotActivateOnStart="true"/>
+
+        <!-- editor -->
+        <editorFactoryListener implementation="com.github.copilot.editor.CopilotEditorListener"/>
+        <editorFactoryListener implementation="com.github.copilot.chat.inline.EditorActionGutterIconListener"/>
+        <typedHandler order="first, before completionAutoPopup"
+                      implementation="com.github.copilot.editor.TypeOverHandler"/>
+        <typedHandler order="first, before completionAutoPopup" 
+                      implementation="com.github.copilot.nes.handlers.NextEditSuggestionsTypedHandler"/>
+        <typedHandler implementation="com.github.copilot.mcp.McpConfigurationTypedHandler"/>
+        <!-- "last" overrides previous promoters, see com.intellij.openapi.keymap.impl.IdeKeyEventDispatcher.rearrangeByPromoters -->
+        <actionPromoter order="last" implementation="com.github.copilot.actions.CopilotActionPromoter"/>
+        <actionPromoter order="last" implementation="com.github.copilot.actions.CopilotCycleActionPromoter"/>
+        <actionPromoter order="last" implementation="com.github.copilot.nes.actions.NextEditSuggestionsActionPromoter"/>
+        <actionPromoter order="last" implementation="com.github.copilot.diff.actions.DiffBlockActionPromoter"/>
+
+        <!-- LSP support -->
+        <editorFactoryDocumentListener implementation="com.github.copilot.lsp.LSPDocumentListener"/>
+
+        <copyPastePostProcessor implementation="com.github.copilot.chat.message.codeblock.CopilotCodeBlockCopyPastePostProcessor"/>
+        <copyPastePostProcessor implementation="com.github.copilot.agent.message.codeblock.CodeBlockCopyPastePostProcessor"/>
+
+
+        <editorActionHandler id="copilot.code.block.copy" action="EditorCopy"
+                             implementationClass="com.github.copilot.agent.message.codeblock.CopyCodeBlockHandler"
+                             order="first" />
+
+        <editorActionHandler id="copilot.textcomp.paste" action="EditorPaste"
+                             implementationClass="com.github.copilot.agent.input.TextCompPasteHandler"
+                             order="first" />
+
+        <!-- Monitor project opened activity -->
+        <postStartupActivity implementation="com.github.copilot.lang.agent.lsp.WorkspaceFolderListener"/>
+
+        <postStartupActivity implementation="com.github.copilot.mcp.agent.listener.McpListener" />
+        <postStartupActivity implementation="com.github.copilot.copilotInstructions.agent.listener.CopilotInstructionsListener" />
+        <postStartupActivity implementation="com.github.copilot.toolWindow.OpenCopilotToolWindowStartupActivity"/>
+        <completion.contributor language="any" order="first" implementationClass="com.github.copilot.mcp.McpConfigurationCompletionContributor" />
+    </extensions>
+
+    <actions>
+        <action id="copilot.enableCopilot"
+                class="com.github.copilot.actions.EnableCopilotCompletionsAction">
+            <keyboard-shortcut first-keystroke="ctrl shift alt O" keymap="$default"/>
+            <override-text place="MainMenu" text="Enable Completions"/>
+            <override-text place="popup" use-text-of-place="MainMenu"/>
+        </action>
+
+        <action id="copilot.documentation"
+                class="com.github.copilot.actions.CopilotDocumentationAction">
+            <override-text place="MainMenu" text="View Copilot Documentation..."/>
+            <override-text place="popup" use-text-of-place="MainMenu"/>
+        </action>
+
+        <action id="copilot.feedback"
+                class="com.github.copilot.actions.CopilotFeedbackAction">
+            <override-text place="MainMenu" text="View Feedback Repository..."/>
+            <override-text place="popup" use-text-of-place="MainMenu"/>
+        </action>
+
+        <action id="copilot.logDiagnostics"
+                class="com.github.copilot.actions.LogDiagnosticsAction">
+            <override-text place="MainMenu" text="Log Diagnostics"/>
+            <override-text place="popup" use-text-of-place="MainMenu"/>
+        </action>
+
+        <action id="copilot.logCertificates"
+                class="com.github.copilot.actions.LogCertificatesAction">
+            <override-text place="MainMenu" text="Log CA Certificates"/>
+            <override-text place="popup" use-text-of-place="MainMenu"/>
+        </action>
+
+        <action id="copilot.logModels"
+                class="com.github.copilot.actions.LogModelsAction">
+            <override-text place="MainMenu" text="Log Models"/>
+            <override-text place="popup" use-text-of-place="MainMenu"/>
+        </action>
+
+        <action id="copilot.disableCopilot" use-shortcut-of="copilot.enableCopilot"
+                class="com.github.copilot.actions.DisableGlobalCopilotCompletionsAction">
+            <override-text place="MainMenu" text="Disable Completions"/>
+            <override-text place="popup" use-text-of-place="MainMenu"/>
+        </action>
+
+        <action id="copilot.disableCopilotFile"
+                class="com.github.copilot.actions.DisableFileCopilotCompletionsAction">
+            <override-text place="MainMenu" text="Disable Completions for File"/>
+            <override-text place="popup" use-text-of-place="MainMenu"/>
+        </action>
+
+        <action id="copilot.loginGitHub"
+                icon="com.github.copilot.CopilotIcons.SignIn"
+                class="com.github.copilot.actions.LoginToGitHubAction">
+            <override-text place="MainMenu" text="Login to GitHub"/>
+            <override-text place="popup" use-text-of-place="MainMenu"/>
+        </action>
+
+        <action id="copilot.logoutGitHub"
+                icon="com.github.copilot.CopilotIcons.SignOut"
+                class="com.github.copilot.actions.LogoutFromGitHubAction">
+            <override-text place="MainMenu" text="Logout from GitHub"/>
+            <override-text place="popup" use-text-of-place="MainMenu"/>
+        </action>
+
+<!--        Since we currently support only one model for completions,-->
+<!--        we're hiding this action to avoid confusion.-->
+<!--        Ticket: https://github.com/microsoft/copilot-intellij/issues/4350-->
+<!--        <action id="copilot.completionModelPicker"-->
+<!--                class="com.github.copilot.actions.CompletionModelPickerAction">-->
+<!--            <override-text place="MainMenu" text="Edit Model for Completions"/>-->
+<!--            <override-text place="popup" use-text-of-place="MainMenu"/>-->
+<!--        </action>-->
+
+        <action id="copilot.settings"
+                class="com.github.copilot.actions.CopilotSettingsAction">
+            <override-text place="MainMenu" text="Edit Settings..."/>
+            <override-text place="popup" use-text-of-place="MainMenu"/>
+        </action>
+
+        <action id="copilot.quotaUsage"
+                class="com.github.copilot.actions.QuotaUsageAction">
+            <override-text place="MainMenu" text="View Quota Usage"/>
+            <override-text place="popup" use-text-of-place="MainMenu"/>
+        </action>
+
+        <action id="copilot.managePaidPremiumRequests"
+                class="com.github.copilot.actions.ManagePaidPremiumRequestsAction">
+            <override-text place="MainMenu" text="Manage Paid Premium Requests"/>
+            <override-text place="popup" use-text-of-place="MainMenu"/>
+        </action>
+
+        <action id="copilot.upgradeToPro"
+                class="com.github.copilot.actions.UpgradeToProAction">
+            <override-text place="MainMenu" text="Upgrade to Copilot Pro"/>
+            <override-text place="popup" use-text-of-place="MainMenu"/>
+        </action>
+
+        <action id="copilot.keymap"
+                class="com.github.copilot.actions.CopilotKeymapAction">
+            <override-text place="MainMenu" text="Show Keymap Settings..."/>
+            <override-text place="popup" use-text-of-place="MainMenu"/>
+        </action>
+
+        <action id="copilot.status"
+                class="com.github.copilot.statusBar.CopilotStatusItemAction">
+        </action>
+
+        <action id="copilot.cyclePrevInlays"
+                class="com.github.copilot.actions.CyclePreviousEditorInlays">
+            <keyboard-shortcut first-keystroke="alt OPEN_BRACKET" keymap="$default"/>
+            <keyboard-shortcut first-keystroke="ctrl COMMA" keymap="$default"/>
+            <!-- macOS fixes to avoid the automatic mapping of ctrl->CMD with $default -->
+            <keyboard-shortcut first-keystroke="alt OPEN_BRACKET" keymap="Mac OS X" replace-all="true"/>
+            <keyboard-shortcut first-keystroke="ctrl COMMA" keymap="Mac OS X"/>
+            <keyboard-shortcut first-keystroke="alt OPEN_BRACKET" keymap="Mac OS X 10.5+" replace-all="true"/>
+            <keyboard-shortcut first-keystroke="ctrl COMMA" keymap="Mac OS X 10.5+"/>
+
+            <override-text place="MainMenu" text="Show Previous Completions"/>
+            <!-- EditorPopup is the place used for the context menu of inlays -->
+            <override-text place="EditorPopup" text="Previous"/>
+        </action>
+
+        <action id="copilot.cycleNextInlays"
+                class="com.github.copilot.actions.CycleNextEditorInlays">
+            <keyboard-shortcut first-keystroke="alt CLOSE_BRACKET" keymap="$default"/>
+            <keyboard-shortcut first-keystroke="ctrl PERIOD" keymap="$default"/>
+            <!-- macOS fixes to avoid the automatic mapping of ctrl->CMD with $default -->
+            <keyboard-shortcut first-keystroke="alt CLOSE_BRACKET" keymap="Mac OS X" replace-all="true"/>
+            <keyboard-shortcut first-keystroke="ctrl PERIOD" keymap="Mac OS X"/>
+            <keyboard-shortcut first-keystroke="alt CLOSE_BRACKET" keymap="Mac OS X 10.5+" replace-all="true"/>
+            <keyboard-shortcut first-keystroke="ctrl PERIOD" keymap="Mac OS X 10.5+"/>
+
+            <override-text place="MainMenu" text="Show Next Completions"/>
+            <!-- EditorPopup is the place used for the context menu of inlays -->
+            <override-text place="EditorPopup" text="Next"/>
+        </action>
+
+        <action id="copilot.applyInlays"
+                class="com.github.copilot.actions.CopilotApplyInlaysAction">
+            <keyboard-shortcut first-keystroke="TAB" keymap="$default"/>
+            <override-text place="MainMenu" text="Apply Completions to Editor"/>
+            <!-- EditorPopup is the place used for the context menu of inlays -->
+            <override-text place="EditorPopup" text="Accept"/>
+        </action>
+
+        <action id="copilot.applyInlaysNextWord"
+                class="com.github.copilot.actions.CopilotApplyNextWordInlayAction">
+            <keyboard-shortcut first-keystroke="control RIGHT" keymap="$default"/>
+            <override-text place="MainMenu" text="Apply Next Word of Completion to Editor"/>
+            <!-- EditorPopup is the place used for the context menu of inlays -->
+            <override-text place="EditorPopup" text="Accept Next Word"/>
+        </action>
+
+        <action id="copilot.applyInlaysNextLine"
+                class="com.github.copilot.actions.CopilotApplyNextLineInlayAction">
+            <keyboard-shortcut first-keystroke="control alt RIGHT" keymap="$default"/>
+            <keyboard-shortcut first-keystroke="control meta RIGHT" keymap="Mac OS X" replace-all="true"/>
+            <keyboard-shortcut first-keystroke="control meta RIGHT" keymap="Mac OS X 10.5+" replace-all="true"/>
+            <override-text place="MainMenu" text="Apply Next Line of Completion to Editor"/>
+            <!-- EditorPopup is the place used for the context menu of inlays -->
+            <override-text place="EditorPopup" text="Accept Next Line"/>
+        </action>
+
+        <action id="copilot.disposeInlays"
+                class="com.github.copilot.actions.CopilotDisposeInlaysAction">
+            <keyboard-shortcut first-keystroke="ESCAPE" keymap="$default"/>
+            <override-text place="MainMenu" text="Hide Completions in Editor"/>
+        </action>
+
+        <action id="copilot.requestCompletions"
+                class="com.github.copilot.actions.CopilotRequestCompletionsAction">
+            <keyboard-shortcut first-keystroke="alt BACK_SLASH" keymap="$default"/>
+            <override-text place="MainMenu" text="Show Completions"/>
+        </action>
+
+        <action id="copilot.openCopilot" class="com.github.copilot.actions.OpenCopilotAction"/>
+        <action id="copilot.openStatus" class="com.github.copilot.actions.ShowStatusPanelAction"/>
+
+        <!-- Next Edit Suggestions TAB Action -->
+        <action id="copilot.nes.tab"
+                class="com.github.copilot.nes.actions.NextEditSuggestionsTabAction">
+            <keyboard-shortcut first-keystroke="TAB" keymap="$default"/>
+            <override-text place="MainMenu" text="Accept Next Edit Suggestion"/>
+            <override-text place="EditorPopup" text="Accept Suggestion"/>
+        </action>
+
+        <!-- Next Edit Suggestions ESC Action -->
+        <action id="copilot.nes.escape"
+                class="com.github.copilot.nes.actions.NextEditSuggestionsEscapeAction">
+            <keyboard-shortcut first-keystroke="ESCAPE" keymap="$default"/>
+            <override-text place="MainMenu" text="Hide Next Edit Suggestions"/>
+            <override-text place="EditorPopup" text="Hide Suggestions"/>
+        </action>
+
+        <!-- DiffBlock Accept Action (Ctrl+Y when hovering over diff block) -->
+        <action id="copilot.diffBlock.accept"
+                class="com.github.copilot.diff.actions.DiffBlockAcceptAction">
+            <keyboard-shortcut first-keystroke="ctrl Y" keymap="$default"/>
+            <override-text place="MainMenu" text="Accept Diff Block"/>
+            <override-text place="EditorPopup" text="Accept Changes"/>
+        </action>
+
+        <!-- DiffBlock Discard Action (Ctrl+N when hovering over diff block) -->
+        <action id="copilot.diffBlock.discard"
+                class="com.github.copilot.diff.actions.DiffBlockDiscardAction">
+            <keyboard-shortcut first-keystroke="ctrl N" keymap="$default"/>
+            <override-text place="MainMenu" text="Discard Diff Block"/>
+            <override-text place="EditorPopup" text="Discard Changes"/>
+        </action>
+
+        <action id="copilot.collectLogsAndReportIssue"
+                class="com.github.copilot.actions.CollectLogsAndReportIssueAction">
+            <override-text place="MainMenu" text="Collect Logs and Report Issue"/>
+            <override-text place="popup" use-text-of-place="MainMenu"/>
+        </action>
+
+        <action id="copilot.chat.show"
+                class="com.github.copilot.chat.window.actions.ToggleChatVisibilityAction">
+            <override-text place="MainMenu" text="Open Chat"/>
+            <override-text place="popup" use-text-of-place="MainMenu"/>
+            <keyboard-shortcut first-keystroke="ctrl shift C" keymap="$default"/>
+            <keyboard-shortcut first-keystroke="ctrl shift C" keymap="Mac OS X" replace-all="true"/>
+            <keyboard-shortcut first-keystroke="ctrl shift C" keymap="Mac OS X 10.5+" replace-all="true"/>
+        </action>
+
+        <action id="copilot.chat.inline"
+                class="com.github.copilot.chat.inline.OpenInlineChatAction">
+            <keyboard-shortcut first-keystroke="ctrl shift G" keymap="$default"/>
+            <keyboard-shortcut first-keystroke="ctrl shift I" keymap="Mac OS X" replace-all="true"/>
+            <keyboard-shortcut first-keystroke="ctrl shift I" keymap="Mac OS X 10.5+" replace-all="true"/>
+            <add-to-group group-id="Floating.CodeToolbar" anchor="first" order="first"/>
+        </action>
+
+        <action id="copilot.chat.agentInstructions" class="com.github.copilot.agent.actions.AgentInstructionsAction"/>
+
+        <!-- The popup menu shown on editor inlays -->
+        <group id="copilot.inlayContextMenu">
+            <reference id="copilot.cycleNextInlays"/>
+            <reference id="copilot.cyclePrevInlays"/>
+            <reference id="copilot.applyInlays"/>
+            <reference id="copilot.applyInlaysNextWord"/>
+            <reference id="copilot.applyInlaysNextLine"/>
+            <separator/>
+            <reference id="copilot.openCopilot"/>
+        </group>
+
+        <group id="copilot.toolsActionGroupLoggedOut"
+               popup="true"
+               icon="com.github.copilot.CopilotIcons.COPILOT">
+            <!-- Account/Status Section -->
+            <reference id="copilot.loginGitHub"/>
+            <separator/>
+            <!-- Chat and Completions Section -->
+            <reference id="copilot.chat.show"/>
+            <separator/>
+            <!-- Settings Section -->
+            <reference id="copilot.settings"/>
+            <reference id="copilot.keymap"/>
+            <separator/>
+            <!-- Documentation Section -->
+            <reference id="copilot.documentation"/>
+            <reference id="copilot.feedback"/>
+            <separator/>
+            <reference id="copilot.logDiagnostics"/>
+            <reference id="copilot.logCertificates"/>
+            <reference id="copilot.logModels"/>
+            <reference id="copilot.collectLogsAndReportIssue"/>
+        </group>
+
+        <group id="copilot.toolsActionGroupLoggedIn"
+               popup="true"
+               icon="com.github.copilot.CopilotIcons.COPILOT">
+            <!-- Account/Status Section -->
+            <reference id="copilot.status"/>
+            <separator/>
+            <reference id="copilot.quotaUsage"/>
+            <reference id="copilot.managePaidPremiumRequests"/>
+            <reference id="copilot.upgradeToPro"/>
+            <separator/>
+            <!-- Chat and Completions Section -->
+            <reference id="copilot.chat.show"/>
+            <reference id="copilot.enableCopilot"/>
+            <reference id="copilot.disableCopilot"/>
+            <reference id="copilot.disableCopilotFile"/>
+            <reference id="copilot.requestCompletions"/>
+            <reference id="copilot.cyclePrevInlays"/>
+            <reference id="copilot.cycleNextInlays"/>
+            <reference id="copilot.openCopilot"/>
+            <separator/>
+            <!-- Settings Section -->
+            <reference id="copilot.settings"/>
+            <reference id="copilot.keymap"/>
+            <separator/>
+            <!-- Documentation Section -->
+            <reference id="copilot.documentation"/>
+            <reference id="copilot.feedback"/>
+            <separator/>
+            <reference id="copilot.logDiagnostics"/>
+            <reference id="copilot.logCertificates"/>
+            <reference id="copilot.logModels"/>
+            <reference id="copilot.collectLogsAndReportIssue"/>
+            <separator/>
+            <reference id="copilot.logoutGitHub"/>
+        </group>
+
+        <!-- Shown as popup menu in the status bar for status "Ready" -->
+        <group id="copilot.statusBarPopup">
+            <!-- Account/Status Section -->
+            <reference id="copilot.status"/>
+            <separator/>
+            <reference id="copilot.quotaUsage"/>
+            <reference id="copilot.managePaidPremiumRequests"/>
+            <reference id="copilot.upgradeToPro"/>
+            <separator/>
+            <!-- Chat and Completions Section -->
+            <reference id="copilot.chat.show"/>
+            <reference id="copilot.enableCopilot"/>
+            <reference id="copilot.disableCopilot"/>
+            <reference id="copilot.disableCopilotFile"/>
+            <separator/>
+            <!-- Settings Section -->
+            <reference id="copilot.settings"/>
+            <reference id="copilot.keymap"/>
+            <separator/>
+            <!-- Documentation Section -->
+            <reference id="copilot.documentation"/>
+            <reference id="copilot.feedback"/>
+            <separator/>
+            <reference id="copilot.logoutGitHub"/>
+        </group>
+
+        <!-- Shown as popup menu in the status bar for status needing an IDE restart -->
+        <group id="copilot.statusBarRestartPopup">
+            <!-- Account/Status Section -->
+            <reference id="copilot.status"/>
+            <separator/>
+            <reference id="copilot.quotaUsage"/>
+            <reference id="copilot.managePaidPremiumRequests"/>
+            <reference id="copilot.upgradeToPro"/>
+            <separator/>
+            <!-- Chat and Completions Section -->
+            <reference id="copilot.chat.show"/>
+            <separator/>
+            <!-- Settings Section -->
+            <reference id="copilot.settings"/>
+            <reference id="copilot.keymap"/>
+            <separator/>
+            <!-- Documentation Section -->
+            <reference id="copilot.documentation"/>
+            <reference id="copilot.feedback"/>
+            <separator/>
+            <reference id="RestartIde"/>
+        </group>
+
+        <!-- Shown as popup menu in the status bar for status != "Ready" -->
+        <group id="copilot.statusBarErrorPopup">
+            <!-- Account/Status Section -->
+            <reference id="copilot.loginGitHub"/>
+            <separator/>
+            <!-- Chat and Completions Section -->
+            <reference id="copilot.chat.show"/>
+            <separator/>
+            <!-- Settings Section -->
+            <reference id="copilot.settings"/>
+            <reference id="copilot.keymap"/>
+            <separator/>
+            <!-- Documentation Section -->
+            <reference id="copilot.documentation"/>
+            <reference id="copilot.feedback"/>
+        </group>
+
+    </actions>
+
+    <depends
+        optional="true"
+        config-file="copilot-vcs-plugin.xml">com.intellij.modules.vcs</depends>
+    <depends
+            optional="true"
+            config-file="copilot-terminal.xml">org.jetbrains.plugins.terminal</depends>
+</idea-plugin>

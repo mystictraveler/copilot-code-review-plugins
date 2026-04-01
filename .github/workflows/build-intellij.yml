@@ -26,14 +26,6 @@ jobs:
           java-version: '17'
           cache: 'gradle'
 
-      - name: List Copilot plugin classes
-        run: |
-          ./gradlew prepareJarSearchableOptions 2>/dev/null || true
-          find ~/.gradle/caches -name "*.jar" -path "*copilot*" 2>/dev/null | head -5 | while read jar; do
-            echo "=== JAR: $jar ==="
-            jar tf "$jar" | grep -E "\.class$" | grep -iv "META-INF" | sed 's/\.class$//' | sed 's/\//./g' | head -100
-          done
-
       - name: Build plugin
         run: ./gradlew buildPlugin
 

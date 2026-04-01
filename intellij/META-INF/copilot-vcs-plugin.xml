@@ -1,0 +1,20 @@
+<idea-plugin>
+    <actions>
+        <action
+            id="copilot.git.commit.button"
+            text="Generate Commit Message with Github Copilot"
+            description="Generate Commit Message with Github Copilot"
+            icon="com.github.copilot.CopilotIcons.COPILOT"
+            class="com.github.copilot.git.GitCommitGenerateAction">
+        <add-to-group group-id="Vcs.MessageActionGroup" anchor="last"/>
+        </action>
+        <action
+            id="copilot.code.review.button"
+            text="Review Code Changes with Github Copilot"
+            description="Review code changes with GitHub Copilot"
+            icon="com.github.copilot.CopilotIcons.CodeReview"
+            class="com.github.copilot.codeReview.CodeChangesReviewAction">
+        <add-to-group group-id="Vcs.MessageActionGroup" anchor="before" relative-to-action="copilot.git.commit.button" />
+        </action>
+    </actions>
+</idea-plugin>
