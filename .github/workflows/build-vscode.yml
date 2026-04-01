@@ -59,3 +59,14 @@ jobs:
           name: VS Code Extension v${{ steps.version.outputs.version }}
           files: vscode/*.vsix
           generate_release_notes: true
+
+      - name: Update README with latest version
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          DOWNLOAD_URL="https://github.com/mystictraveler/copilot-code-review-plugins/releases/download/vscode-v${VERSION}/copilot-code-review-${VERSION}.vsix"
+          sed -i "s|VS Code | latest |.*|VS Code | v${VERSION} | [copilot-code-review-${VERSION}.vsix](${DOWNLOAD_URL}) |" README.md
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git diff --cached --quiet || git commit -m "Update VS Code download link to v${VERSION} [skip ci]" && git push

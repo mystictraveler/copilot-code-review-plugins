@@ -1,6 +1,18 @@
 # Copilot Code Review Plugins
 
+[![Build IntelliJ Plugin](https://github.com/mystictraveler/copilot-code-review-plugins/actions/workflows/build-intellij.yml/badge.svg)](https://github.com/mystictraveler/copilot-code-review-plugins/actions/workflows/build-intellij.yml)
+[![Build VS Code Extension](https://github.com/mystictraveler/copilot-code-review-plugins/actions/workflows/build-vscode.yml/badge.svg)](https://github.com/mystictraveler/copilot-code-review-plugins/actions/workflows/build-vscode.yml)
+
 VS Code extension and IntelliJ plugin that automatically review your code using GitHub Copilot on every file save. Issues are surfaced as editor diagnostics/annotations and in a dedicated review panel with severity badges.
+
+## Downloads
+
+<!-- LATEST_RELEASES_START -->
+| Plugin | Version | Download |
+|--------|---------|----------|
+| IntelliJ | latest | [Releases](https://github.com/mystictraveler/copilot-code-review-plugins/releases?q=intellij) |
+| VS Code | latest | [Releases](https://github.com/mystictraveler/copilot-code-review-plugins/releases?q=vscode) |
+<!-- LATEST_RELEASES_END -->
 
 Both plugins share the same core workflow: save a file, wait for a configurable debounce delay, send the file contents to Copilot for review, parse the structured JSON response, and display the results inline in the editor and in a formatted panel.
 
