@@ -2,10 +2,15 @@
     <id>com.copilotreview.copilot-code-review</id>
     <name>Copilot Code Review on Save</name>
     <vendor>copilot-review</vendor>
-    <description>Automatically reviews code using GitHub Copilot on every file save. Requires GitHub Copilot plugin and a Git repository.</description>
+    <description>Automatically reviews code using the IntelliJ Language Model API on every file save. Works with any LM provider (Copilot, Anthropic, etc.).</description>
 
     <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.lm</depends>
     <depends>com.github.copilot</depends>
+
+    <extensions defaultExtensionNs="com.intellij.lm">
+        <provider implementation="com.copilotreview.lm.CopilotLmProvider"/>
+    </extensions>
 
     <extensions defaultExtensionNs="com.intellij">
         <backgroundPostStartupActivity implementation="com.copilotreview.CopilotReviewStartup"/>

@@ -10,10 +10,6 @@ class ReviewNowAction : AnAction() {
         val project = e.project ?: return
         val service = CopilotReviewService.getInstance(project)
 
-        if (!service.isCopilotInstalled()) {
-            Messages.showWarningDialog(project, "GitHub Copilot plugin is not installed.", "Copilot Code Review")
-            return
-        }
         if (!service.isGitProject()) {
             Messages.showWarningDialog(project, "Copilot Code Review only works in Git repositories.", "Copilot Code Review")
             return

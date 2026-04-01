@@ -17,19 +17,6 @@ class CopilotReviewStartup : ProjectActivity {
     override suspend fun execute(project: Project) {
         val service = CopilotReviewService.getInstance(project)
 
-        // Check Copilot is installed
-        if (!service.isCopilotInstalled()) {
-            log.warn("Copilot Code Review: GitHub Copilot plugin is not installed or disabled.")
-            ApplicationManager.getApplication().invokeLater {
-                com.intellij.openapi.ui.Messages.showWarningDialog(
-                    project,
-                    "Copilot Code Review requires the GitHub Copilot plugin to be installed and enabled.",
-                    "Copilot Code Review"
-                )
-            }
-            return
-        }
-
         // Check Git repo
         if (!service.isGitProject()) {
             log.info("Copilot Code Review: No Git repository found in project, disabling.")

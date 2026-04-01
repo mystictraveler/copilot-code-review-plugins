@@ -17,9 +17,11 @@ repositories {
 dependencies {
     intellijPlatform {
         intellijIdeaCommunity("2024.3")
+        localPlugin(file("../../intellij-lm-api/build/distributions/intellij-lm-api-0.0.1.zip"))
         plugin("com.github.copilot", "1.7.1-243")
         instrumentationTools()
     }
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
 }
 
 kotlin {
