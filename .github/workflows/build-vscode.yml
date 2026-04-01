@@ -1,6 +1,7 @@
 name: Build VS Code Extension
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - 'vscode/**'
@@ -13,6 +14,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     defaults:
       run:
         working-directory: vscode
@@ -26,6 +29,13 @@ jobs:
           cache: 'npm'
           cache-dependency-path: vscode/package-lock.json
 
+      - name: Set version
+        id: version
+        run: echo "version=0.1.${{ github.run_number }}" >> $GITHUB_OUTPUT
+
+      - name: Bump version in package.json
+        run: npm version ${{ steps.version.outputs.version }} --no-git-tag-version
+
       - name: Install dependencies
         run: npm ci
 
@@ -38,5 +48,14 @@ jobs:
       - name: Upload VSIX artifact
         uses: actions/upload-artifact@v4
         with:
-          name: copilot-code-review-vscode
+          name: copilot-code-review-vscode-${{ steps.version.outputs.version }}
           path: vscode/*.vsix
+
+      - name: Create release
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: vscode-v${{ steps.version.outputs.version }}
+          name: VS Code Extension v${{ steps.version.outputs.version }}
+          files: vscode/*.vsix
+          generate_release_notes: true

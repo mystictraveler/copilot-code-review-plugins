@@ -14,6 +14,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -23,6 +25,14 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
           cache: 'gradle'
+
+      - name: Set version
+        id: version
+        run: echo "version=0.1.${{ github.run_number }}" >> $GITHUB_OUTPUT
+
+      - name: Bump version in build.gradle.kts
+        working-directory: intellij
+        run: sed -i "s/version = \".*\"/version = \"${{ steps.version.outputs.version }}\"/" build.gradle.kts
 
       - name: Clone and build LM API dependency
         run: |
@@ -37,5 +47,14 @@ jobs:
       - name: Upload plugin artifact
         uses: actions/upload-artifact@v4
         with:
-          name: copilot-code-review-intellij
+          name: copilot-code-review-intellij-${{ steps.version.outputs.version }}
           path: intellij/build/distributions/*.zip
+
+      - name: Create release
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: intellij-v${{ steps.version.outputs.version }}
+          name: IntelliJ Plugin v${{ steps.version.outputs.version }}
+          files: intellij/build/distributions/*.zip
+          generate_release_notes: true
