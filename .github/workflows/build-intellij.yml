@@ -64,7 +64,7 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           DOWNLOAD_URL="https://github.com/mystictraveler/copilot-code-review-plugins/releases/download/intellij-v${VERSION}/copilot-code-review-${VERSION}.zip"
-          sed -i "s#| IntelliJ |.*#| IntelliJ | v${VERSION} | [copilot-code-review-${VERSION}.zip](${DOWNLOAD_URL}) |#" README.md
+          sed -i "/LATEST_RELEASES_START/,/LATEST_RELEASES_END/s#| IntelliJ |.*#| IntelliJ | v${VERSION} | [copilot-code-review-${VERSION}.zip](${DOWNLOAD_URL}) |#" README.md
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add README.md

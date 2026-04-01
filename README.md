@@ -18,7 +18,7 @@ Both plugins share the same core workflow: save a file, wait for a configurable 
 
 ## Features
 
-| Feature | VS Code | IntelliJ | v0.1.23 | [copilot-code-review-0.1.23.zip](https://github.com/mystictraveler/copilot-code-review-plugins/releases/download/intellij-v0.1.23/copilot-code-review-0.1.23.zip) |
+| Feature | VS Code | IntelliJ |
 |---|:---:|:---:|
 | Auto-review on save with debounce | Yes | Yes |
 | Review scope: single file or all open files (project) | Yes | Yes |
