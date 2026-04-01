@@ -5,6 +5,7 @@
     <description>Automatically reviews code using GitHub Copilot on every file save. Requires GitHub Copilot plugin and a Git repository.</description>
 
     <depends>com.intellij.modules.platform</depends>
+    <depends>com.github.copilot</depends>
 
     <extensions defaultExtensionNs="com.intellij">
         <backgroundPostStartupActivity implementation="com.copilotreview.CopilotReviewStartup"/>

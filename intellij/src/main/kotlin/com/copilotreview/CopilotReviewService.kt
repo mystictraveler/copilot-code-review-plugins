@@ -9,9 +9,8 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.google.gson.Gson
 import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
-import java.io.BufferedReader
+import com.github.copilot.AuthHelper
 import java.io.File
-import java.io.InputStreamReader
 import com.intellij.util.net.HttpConfigurable
 import java.net.HttpURLConnection
 import java.net.URI
@@ -21,6 +20,7 @@ import java.util.Date
 import java.util.Timer
 import java.util.TimerTask
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.runBlocking
 
 class CopilotReviewService(private val project: Project) {
 
@@ -163,10 +163,10 @@ class CopilotReviewService(private val project: Project) {
             return cachedToken!!
         }
 
-        // Read the GitHub OAuth token from Copilot's config
-        val oauthToken = readCopilotOAuthToken()
+        // Get OAuth token from the Copilot plugin's auth
+        val oauthToken = getOAuthTokenFromCopilotPlugin()
             ?: throw IllegalStateException(
-                "Could not find GitHub Copilot OAuth token. Make sure you are signed in to GitHub Copilot."
+                "Could not get OAuth token from GitHub Copilot. Make sure you are signed in."
             )
 
         // Exchange OAuth token for a Copilot API session token
@@ -195,47 +195,14 @@ class CopilotReviewService(private val project: Project) {
         return cachedToken!!
     }
 
-    private fun readCopilotOAuthToken(): String? {
-        // Copilot stores OAuth tokens in well-known config locations
-        val homeDir = System.getProperty("user.home")
-
-        // Try the standard locations where Copilot stores credentials
-        val configPaths = listOf(
-            "$homeDir/.config/github-copilot/hosts.json",
-            "$homeDir/.config/github-copilot/apps.json",
-            "$homeDir/Library/Application Support/github-copilot/hosts.json",
-            "$homeDir/Library/Application Support/github-copilot/apps.json"
-        )
-
-        for (path in configPaths) {
-            val file = File(path)
-            if (!file.exists()) continue
-
-            try {
-                val content = file.readText()
-                val json = JsonParser.parseString(content).asJsonObject
-
-                // hosts.json format: {"github.com": {"oauth_token": "..."}}
-                for (key in json.keySet()) {
-                    val entry = json.get(key)
-                    if (entry != null && entry.isJsonObject) {
-                        val obj = entry.asJsonObject
-                        if (obj.has("oauth_token")) {
-                            return obj.get("oauth_token").asString
-                        }
-                    }
-                }
-
-                // apps.json format may have the token directly
-                if (json.has("oauth_token")) {
-                    return json.get("oauth_token").asString
-                }
-            } catch (e: Exception) {
-                log.info("Could not read Copilot config at $path: ${e.message}")
-            }
+    private fun getOAuthTokenFromCopilotPlugin(): String? {
+        return try {
+            val accounts: Set<com.github.copilot.GitHubAccountCredentials> = runBlocking { AuthHelper.getAccounts() }
+            accounts.firstOrNull()?.token
+        } catch (e: Exception) {
+            log.warn("[CopilotReview] Failed to get token from Copilot plugin: ${e.message}")
+            null
         }
-
-        return null
     }
 
     private fun extractReviewFromChatResponse(responseBody: String): List<ReviewIssue> {
