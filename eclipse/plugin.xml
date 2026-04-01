@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.4"?>
+<plugin>
+
+   <extension point="org.eclipse.ui.startup">
+      <startup class="com.copilotreview.eclipse.StartupHook"/>
+   </extension>
+
+   <extension point="org.eclipse.ui.views">
+      <view
+            id="com.copilotreview.eclipse.reviewView"
+            name="Copilot Review"
+            class="com.copilotreview.eclipse.CopilotReviewView"
+            icon="icons/review.png"
+            category="org.eclipse.ui"/>
+   </extension>
+
+   <extension point="org.eclipse.ui.commands">
+      <command
+            id="com.copilotreview.eclipse.reviewNow"
+            name="Copilot: Review Current File"/>
+      <command
+            id="com.copilotreview.eclipse.toggle"
+            name="Copilot: Toggle Auto-Review on Save"/>
+      <command
+            id="com.copilotreview.eclipse.clearMarkers"
+            name="Copilot: Clear Review Markers"/>
+   </extension>
+
+   <extension point="org.eclipse.ui.handlers">
+      <handler
+            commandId="com.copilotreview.eclipse.reviewNow"
+            class="com.copilotreview.eclipse.handlers.ReviewNowHandler"/>
+      <handler
+            commandId="com.copilotreview.eclipse.toggle"
+            class="com.copilotreview.eclipse.handlers.ToggleHandler"/>
+      <handler
+            commandId="com.copilotreview.eclipse.clearMarkers"
+            class="com.copilotreview.eclipse.handlers.ClearMarkersHandler"/>
+   </extension>
+
+   <extension point="org.eclipse.ui.menus">
+      <menuContribution locationURI="menu:edit?after=additions">
+         <command commandId="com.copilotreview.eclipse.reviewNow"/>
+         <command commandId="com.copilotreview.eclipse.toggle"/>
+         <command commandId="com.copilotreview.eclipse.clearMarkers"/>
+      </menuContribution>
+   </extension>
+
+   <extension point="org.eclipse.ui.preferencePages">
+      <page
+            id="com.copilotreview.eclipse.preferences"
+            name="Copilot Code Review"
+            class="com.copilotreview.eclipse.preferences.CopilotReviewPreferencePage"/>
+   </extension>
+
+   <extension point="org.eclipse.core.runtime.preferences">
+      <initializer class="com.copilotreview.eclipse.preferences.PreferenceInitializer"/>
+   </extension>
+
+</plugin>
