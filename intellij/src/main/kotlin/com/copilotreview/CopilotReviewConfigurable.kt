@@ -9,6 +9,7 @@ class CopilotReviewConfigurable(private val project: Project) : Configurable {
     private var enabledCheckbox: JCheckBox? = null
     private var debounceField: JTextField? = null
     private var excludedField: JTextField? = null
+    private var scopeCombo: JComboBox<String>? = null
 
     override fun getDisplayName(): String = "Copilot Code Review"
 
@@ -36,6 +37,15 @@ class CopilotReviewConfigurable(private val project: Project) : Configurable {
         excludedPanel.add(excludedField)
         excludedPanel.add(Box.createHorizontalGlue())
         panel.add(excludedPanel)
+        panel.add(Box.createVerticalStrut(10))
+
+        val scopePanel = JPanel().apply { layout = BoxLayout(this, BoxLayout.X_AXIS) }
+        scopePanel.add(JLabel("Review scope on save: "))
+        scopeCombo = JComboBox(arrayOf("file", "project"))
+        scopeCombo!!.selectedItem = settings.scope
+        scopePanel.add(scopeCombo)
+        scopePanel.add(Box.createHorizontalGlue())
+        panel.add(scopePanel)
 
         panel.add(Box.createVerticalGlue())
         return panel
@@ -46,6 +56,7 @@ class CopilotReviewConfigurable(private val project: Project) : Configurable {
         return enabledCheckbox?.isSelected != settings.enabled
                 || debounceField?.text != settings.debounceMs.toString()
                 || excludedField?.text != settings.excludedExtensions
+                || scopeCombo?.selectedItem != settings.scope
     }
 
     override fun apply() {
@@ -53,7 +64,8 @@ class CopilotReviewConfigurable(private val project: Project) : Configurable {
         settings.loadState(CopilotReviewSettings.State(
             enabled = enabledCheckbox?.isSelected ?: true,
             debounceMs = debounceField?.text?.toLongOrNull() ?: 2000,
-            excludedExtensions = excludedField?.text ?: "txt"
+            excludedExtensions = excludedField?.text ?: "txt",
+            scope = scopeCombo?.selectedItem as? String ?: "file"
         ))
     }
 
@@ -62,5 +74,6 @@ class CopilotReviewConfigurable(private val project: Project) : Configurable {
         enabledCheckbox?.isSelected = settings.enabled
         debounceField?.text = settings.debounceMs.toString()
         excludedField?.text = settings.excludedExtensions
+        scopeCombo?.selectedItem = settings.scope
     }
 }

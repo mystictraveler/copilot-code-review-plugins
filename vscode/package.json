@@ -45,6 +45,12 @@
           "type": "array",
           "default": ["plaintext"],
           "description": "Language IDs to exclude from auto-review"
+        },
+        "copilotCodeReview.scope": {
+          "type": "string",
+          "enum": ["file", "project"],
+          "default": "file",
+          "description": "Review scope on save: 'file' reviews only the saved file, 'project' reviews all open files"
         }
       }
     }

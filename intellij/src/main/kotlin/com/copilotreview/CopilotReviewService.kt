@@ -6,20 +6,21 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.extensions.PluginId
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.openapi.wm.ToolWindowManager
-import com.intellij.util.net.HttpConfigurable
-import com.github.copilot.AuthHelper
 import com.google.gson.Gson
 import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
+import java.io.BufferedReader
 import java.io.File
+import java.io.InputStreamReader
+import com.intellij.util.net.HttpConfigurable
 import java.net.HttpURLConnection
 import java.net.URI
+import java.net.URL
+import com.intellij.openapi.wm.ToolWindowManager
 import java.util.Date
 import java.util.Timer
 import java.util.TimerTask
 import java.util.concurrent.ConcurrentHashMap
-import kotlinx.coroutines.runBlocking
 
 class CopilotReviewService(private val project: Project) {
 
@@ -78,31 +79,34 @@ class CopilotReviewService(private val project: Project) {
         if (reviewInProgress.contains(path)) return
         reviewInProgress.add(path)
 
-        log.info("[CopilotReview] Starting review for ${file.name}")
         statusCallback?.invoke("Reviewing...")
 
         Thread {
             try {
                 val (content, lineCount) = ApplicationManager.getApplication().runReadAction<Pair<String, Int>> {
                     val text = String(file.contentsToByteArray())
-                    Pair(text, text.count { it == '\n' } + 1)
+                    val lines = text.count { it == '\n' } + 1
+                    Pair(text, lines)
                 }
+                val fileName = file.name
+                val lang = file.fileType.name
 
-                val issues = callCopilotForReview(content, file.name, file.fileType.name)
-                log.info("[CopilotReview] Got ${issues.size} issue(s)")
+                val issues = callCopilotForReview(content, fileName, lang)
 
                 ApplicationManager.getApplication().invokeLater {
                     ReviewAnnotator.applyAnnotations(project, path, issues, lineCount)
                     statusCallback?.invoke(if (issues.isEmpty()) "No issues" else "${issues.size} issue(s)")
 
-                    val result = ReviewResult(file.name, path, issues, Date())
+                    // Update the tool window panel
+                    val result = ReviewResult(fileName, path, issues, Date())
+                    ReviewToolWindowPanel.update(project, result)
+
+                    // Show and activate the tool window
                     val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Copilot Review")
-                    toolWindow?.show {
-                        ReviewToolWindowPanel.update(project, result)
-                    }
+                    toolWindow?.show()
                 }
             } catch (e: Exception) {
-                log.warn("[CopilotReview] Review failed: ${e.message}", e)
+                log.warn("Copilot review failed: ${e.message}", e)
                 ApplicationManager.getApplication().invokeLater {
                     statusCallback?.invoke("Review failed: ${e.message}")
                 }
@@ -126,13 +130,12 @@ class CopilotReviewService(private val project: Project) {
             "stream" to false
         ))
 
-        // Use HttpConfigurable for proxy support
         val url = URI("https://api.githubcopilot.com/chat/completions").toURL()
-        val conn = HttpConfigurable.getInstance().openHttpConnection(url.toString()) as HttpURLConnection
+        val conn = openConnection(url)
         conn.requestMethod = "POST"
         conn.setRequestProperty("Authorization", "Bearer $token")
         conn.setRequestProperty("Content-Type", "application/json")
-        conn.setRequestProperty("Editor-Version", "JetBrains/2024.3")
+        conn.setRequestProperty("Editor-Version", "JetBrains-IC/2024.2")
         conn.setRequestProperty("Editor-Plugin-Version", "copilot-code-review/0.0.1")
         conn.setRequestProperty("Openai-Organization", "github-copilot")
         conn.setRequestProperty("Copilot-Integration-Id", "vscode-chat")
@@ -160,13 +163,15 @@ class CopilotReviewService(private val project: Project) {
             return cachedToken!!
         }
 
-        // Get OAuth token from Copilot plugin's auth
-        val oauthToken = getOAuthTokenFromCopilotPlugin()
-            ?: throw IllegalStateException("Could not get OAuth token from GitHub Copilot. Make sure you are signed in.")
+        // Read the GitHub OAuth token from Copilot's config
+        val oauthToken = readCopilotOAuthToken()
+            ?: throw IllegalStateException(
+                "Could not find GitHub Copilot OAuth token. Make sure you are signed in to GitHub Copilot."
+            )
 
-        // Exchange for Copilot API session token (proxy-aware)
+        // Exchange OAuth token for a Copilot API session token
         val url = URI("https://api.github.com/copilot_internal/v2/token").toURL()
-        val conn = HttpConfigurable.getInstance().openHttpConnection(url.toString()) as HttpURLConnection
+        val conn = openConnection(url)
         conn.requestMethod = "GET"
         conn.setRequestProperty("Authorization", "token $oauthToken")
         conn.setRequestProperty("Accept", "application/json")
@@ -190,21 +195,47 @@ class CopilotReviewService(private val project: Project) {
         return cachedToken!!
     }
 
-    private fun getOAuthTokenFromCopilotPlugin(): String? {
-        // Get the OAuth token directly from the Copilot plugin's AuthHelper
-        return try {
-            val accounts: Set<com.github.copilot.GitHubAccountCredentials> = runBlocking { AuthHelper.getAccounts() }
-            val token = accounts.firstOrNull()?.token
-            if (token != null) {
-                log.info("[CopilotReview] Got OAuth token from Copilot plugin")
-            } else {
-                log.warn("[CopilotReview] No accounts found in Copilot plugin")
+    private fun readCopilotOAuthToken(): String? {
+        // Copilot stores OAuth tokens in well-known config locations
+        val homeDir = System.getProperty("user.home")
+
+        // Try the standard locations where Copilot stores credentials
+        val configPaths = listOf(
+            "$homeDir/.config/github-copilot/hosts.json",
+            "$homeDir/.config/github-copilot/apps.json",
+            "$homeDir/Library/Application Support/github-copilot/hosts.json",
+            "$homeDir/Library/Application Support/github-copilot/apps.json"
+        )
+
+        for (path in configPaths) {
+            val file = File(path)
+            if (!file.exists()) continue
+
+            try {
+                val content = file.readText()
+                val json = JsonParser.parseString(content).asJsonObject
+
+                // hosts.json format: {"github.com": {"oauth_token": "..."}}
+                for (key in json.keySet()) {
+                    val entry = json.get(key)
+                    if (entry != null && entry.isJsonObject) {
+                        val obj = entry.asJsonObject
+                        if (obj.has("oauth_token")) {
+                            return obj.get("oauth_token").asString
+                        }
+                    }
+                }
+
+                // apps.json format may have the token directly
+                if (json.has("oauth_token")) {
+                    return json.get("oauth_token").asString
+                }
+            } catch (e: Exception) {
+                log.info("Could not read Copilot config at $path: ${e.message}")
             }
-            token
-        } catch (e: Exception) {
-            log.warn("[CopilotReview] Failed to get token from Copilot plugin: ${e.message}")
-            null
         }
+
+        return null
     }
 
     private fun extractReviewFromChatResponse(responseBody: String): List<ReviewIssue> {
@@ -237,11 +268,13 @@ $code"""
     fun parseResponse(response: String): List<ReviewIssue> {
         var jsonStr = response.trim()
 
+        // Strip markdown fences
         val fenceMatch = Regex("```(?:json)?\\s*([\\s\\S]*?)```").find(jsonStr)
         if (fenceMatch != null) {
             jsonStr = fenceMatch.groupValues[1].trim()
         }
 
+        // Find JSON array
         val arrayMatch = Regex("\\[\\s*[\\s\\S]*]").find(jsonStr) ?: return emptyList()
         jsonStr = arrayMatch.value
 
@@ -255,8 +288,18 @@ $code"""
                 ReviewIssue(line, severity, message)
             }
         } catch (e: Exception) {
-            log.warn("[CopilotReview] Failed to parse review response: ${e.message}")
+            log.warn("Failed to parse review response: ${e.message}")
             emptyList()
+        }
+    }
+
+    private fun openConnection(url: URL): HttpURLConnection {
+        val httpConfig = HttpConfigurable.getInstance()
+        return if (httpConfig.USE_HTTP_PROXY) {
+            log.info("[CopilotReview] Using IDE proxy: ${httpConfig.PROXY_HOST}:${httpConfig.PROXY_PORT}")
+            httpConfig.openHttpConnection(url.toString()) as HttpURLConnection
+        } else {
+            url.openConnection() as HttpURLConnection
         }
     }
 

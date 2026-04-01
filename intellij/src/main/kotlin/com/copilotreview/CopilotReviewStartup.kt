@@ -15,14 +15,11 @@ class CopilotReviewStartup : ProjectActivity {
     private val log = Logger.getInstance(CopilotReviewStartup::class.java)
 
     override suspend fun execute(project: Project) {
-        log.info("[CopilotReview] Startup: initializing for project '${project.name}' at ${project.basePath}")
         val service = CopilotReviewService.getInstance(project)
 
         // Check Copilot is installed
-        val copilotInstalled = service.isCopilotInstalled()
-        log.info("[CopilotReview] Startup: Copilot installed = $copilotInstalled")
-        if (!copilotInstalled) {
-            log.warn("[CopilotReview] Startup: GitHub Copilot plugin is not installed or disabled — aborting.")
+        if (!service.isCopilotInstalled()) {
+            log.warn("Copilot Code Review: GitHub Copilot plugin is not installed or disabled.")
             ApplicationManager.getApplication().invokeLater {
                 com.intellij.openapi.ui.Messages.showWarningDialog(
                     project,
@@ -34,10 +31,8 @@ class CopilotReviewStartup : ProjectActivity {
         }
 
         // Check Git repo
-        val isGit = service.isGitProject()
-        log.info("[CopilotReview] Startup: Git project = $isGit (basePath=${project.basePath})")
-        if (!isGit) {
-            log.info("[CopilotReview] Startup: No .git folder found walking up from ${project.basePath} — disabling.")
+        if (!service.isGitProject()) {
+            log.info("Copilot Code Review: No Git repository found in project, disabling.")
             ApplicationManager.getApplication().invokeLater {
                 setStatusBarText(project, "Copilot Review: No Git repo")
             }
@@ -55,8 +50,6 @@ class CopilotReviewStartup : ProjectActivity {
             setStatusBarText(project, "Copilot Review: ON")
         }
 
-        log.info("[CopilotReview] Startup: Registering file save listener")
-
         // Listen for file saves
         project.messageBus.connect().subscribe(
             VirtualFileManager.VFS_CHANGES,
@@ -68,19 +61,21 @@ class CopilotReviewStartup : ProjectActivity {
 
                         // Only review files open in the editor
                         val openFiles = FileEditorManager.getInstance(project).openFiles
-                        if (file !in openFiles) {
-                            log.info("[CopilotReview] Save: Skipping ${file.name} — not open in editor")
-                            continue
-                        }
+                        if (file !in openFiles) continue
 
-                        log.info("[CopilotReview] Save: Scheduling review for ${file.name} (${file.path})")
-                        service.scheduleReview(file)
+                        val settings = CopilotReviewSettings.getInstance(project).state
+                        if (settings.scope == "project") {
+                            for (openFile in openFiles) {
+                                service.scheduleReview(openFile)
+                            }
+                            break
+                        } else {
+                            service.scheduleReview(file)
+                        }
                     }
                 }
             }
         )
-
-        log.info("[CopilotReview] Startup: Complete — plugin is active")
     }
 
     private fun setStatusBarText(project: Project, text: String) {

@@ -65,14 +65,20 @@ export async function activate(context: vscode.ExtensionContext) {
             if (excluded.includes(document.languageId)) return;
 
             const debounceMs = config.get<number>('debounceMs', 2000);
-            const uri = document.uri.toString();
+            const scope = config.get<string>('scope', 'file');
 
-            const existing = debounceTimers.get(uri);
+            const debounceKey = scope === 'project' ? '__project__' : document.uri.toString();
+
+            const existing = debounceTimers.get(debounceKey);
             if (existing) clearTimeout(existing);
 
-            debounceTimers.set(uri, setTimeout(() => {
-                debounceTimers.delete(uri);
-                reviewDocument(document);
+            debounceTimers.set(debounceKey, setTimeout(() => {
+                debounceTimers.delete(debounceKey);
+                if (scope === 'project') {
+                    reviewAllOpenFiles(excluded);
+                } else {
+                    reviewDocument(document);
+                }
             }, debounceMs));
         })
     );
@@ -123,6 +129,15 @@ interface ParsedIssue {
 }
 
 let lastReviewResults: { fileName: string; filePath: string; issues: ParsedIssue[]; timestamp: Date } | undefined;
+
+async function reviewAllOpenFiles(excluded: string[]) {
+    const documents = vscode.workspace.textDocuments.filter(doc =>
+        doc.uri.scheme === 'file' && !excluded.includes(doc.languageId)
+    );
+    for (const doc of documents) {
+        await reviewDocument(doc);
+    }
+}
 
 async function reviewDocument(document: vscode.TextDocument) {
     const uri = document.uri.toString();

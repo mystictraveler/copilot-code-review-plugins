@@ -10,7 +10,8 @@ class CopilotReviewSettings : PersistentStateComponent<CopilotReviewSettings.Sta
     data class State(
         var enabled: Boolean = true,
         var debounceMs: Long = 2000,
-        var excludedExtensions: String = "txt"
+        var excludedExtensions: String = "txt",
+        var scope: String = "file" // "file" or "project"
     )
 
     private var myState = State()

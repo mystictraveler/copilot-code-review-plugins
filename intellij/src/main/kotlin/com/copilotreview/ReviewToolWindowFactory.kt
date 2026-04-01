@@ -25,9 +25,6 @@ class ReviewToolWindowFactory : ToolWindowFactory, DumbAware {
         val content = ContentFactory.getInstance().createContent(panel.component, "Review", false)
         toolWindow.contentManager.addContent(content)
         ReviewToolWindowPanel.instances[project] = panel
-
-        // Display any result that arrived before the panel was created
-        ReviewToolWindowPanel.getLatestResult(project)?.let { panel.updateResults(it) }
     }
 }
 
@@ -211,13 +208,9 @@ class ReviewToolWindowPanel(private val project: Project) {
 
     companion object {
         val instances = mutableMapOf<Project, ReviewToolWindowPanel>()
-        private val latestResults = mutableMapOf<Project, ReviewResult>()
 
         fun update(project: Project, result: ReviewResult) {
-            latestResults[project] = result
             instances[project]?.updateResults(result)
         }
-
-        fun getLatestResult(project: Project): ReviewResult? = latestResults[project]
     }
 }

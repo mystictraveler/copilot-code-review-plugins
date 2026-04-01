@@ -1,6 +1,6 @@
 plugins {
     id("java")
-    id("org.jetbrains.kotlin.jvm") version "2.1.0"
+    id("org.jetbrains.kotlin.jvm") version "1.9.25"
     id("org.jetbrains.intellij.platform") version "2.2.1"
 }
 
@@ -16,8 +16,7 @@ repositories {
 
 dependencies {
     intellijPlatform {
-        intellijIdeaCommunity("2024.3")
-        plugin("com.github.copilot", "1.7.1-243")
+        intellijIdeaCommunity("2024.2")
         instrumentationTools()
     }
 }
@@ -28,7 +27,7 @@ kotlin {
 
 tasks {
     patchPluginXml {
-        sinceBuild.set("243")
+        sinceBuild.set("242")
         untilBuild.set("253.*")
     }
 
