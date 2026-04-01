@@ -233,4 +233,4 @@ Both workflows are scoped to only trigger when files in their respective directo
 
 ## License
 
-See individual plugin directories for license information.
+This project is licensed under the [MIT License](LICENSE).
