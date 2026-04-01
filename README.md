@@ -10,7 +10,7 @@ VS Code extension and IntelliJ plugin that automatically review your code using 
 <!-- LATEST_RELEASES_START -->
 | Plugin | Version | Download |
 |--------|---------|----------|
-| IntelliJ | v0.1.24 | [copilot-code-review-0.1.24.zip](https://github.com/mystictraveler/copilot-code-review-plugins/releases/download/intellij-v0.1.24/copilot-code-review-0.1.24.zip) |
+| IntelliJ | v0.1.25 | [copilot-code-review-0.1.25.zip](https://github.com/mystictraveler/copilot-code-review-plugins/releases/download/intellij-v0.1.25/copilot-code-review-0.1.25.zip) |
 | VS Code | v0.1.7 | [copilot-code-review-0.1.7.vsix](https://github.com/mystictraveler/copilot-code-review-plugins/releases/download/vscode-v0.1.7/copilot-code-review-0.1.7.vsix) |
 <!-- LATEST_RELEASES_END -->
 
